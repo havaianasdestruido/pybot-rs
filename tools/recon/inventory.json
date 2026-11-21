@@ -1,0 +1,623 @@
+{
+  "files": 534,
+  "loc_by_top_dir": {
+    ".": 198,
+    "bot": 637077,
+    "tests": 162,
+    "tools": 1131
+  },
+  "files_by_top_dir": {
+    ".": 1,
+    "bot": 528,
+    "tests": 1,
+    "tools": 4
+  },
+  "imports_top": {
+    "bot (relative)": 1569,
+    "re": 419,
+    "datetime": 57,
+    "bot": 56,
+    "random": 29,
+    "string": 13,
+    "copy": 13,
+    "sys": 11,
+    "argparse": 5,
+    "importlib": 4,
+    "os": 4,
+    "math": 4,
+    "json": 4,
+    "pathlib": 4,
+    "calendar": 3,
+    "pkgutil": 2,
+    "ast": 2,
+    "unicodedata": 2,
+    "hashlib": 2,
+    "time": 2,
+    "io": 2,
+    "subprocess": 2,
+    "unittest": 2,
+    "operator": 1,
+    "decimal": 1,
+    "fractions": 1,
+    "functools": 1,
+    "difflib": 1,
+    "itertools": 1,
+    "readline": 1,
+    "contextlib": 1,
+    "pybot": 1,
+    "multiprocessing": 1,
+    "collections": 1,
+    "resource": 1,
+    "cProfile": 1,
+    "pstats": 1,
+    "tools": 1
+  },
+  "stdlib_total": {
+    "re": 419,
+    "datetime": 57,
+    "random": 29,
+    "string": 13,
+    "copy": 13,
+    "sys": 11,
+    "math": 5,
+    "argparse": 5,
+    "importlib": 4,
+    "os": 4,
+    "json": 4,
+    "pathlib": 4,
+    "calendar": 3,
+    "pkgutil": 2,
+    "ast": 2,
+    "decimal": 2,
+    "unicodedata": 2,
+    "hashlib": 2,
+    "time": 2,
+    "io": 2,
+    "subprocess": 2,
+    "unittest": 2,
+    "operator": 1,
+    "fractions": 1,
+    "functools": 1,
+    "difflib": 1,
+    "itertools": 1,
+    "readline": 1,
+    "contextlib": 1,
+    "multiprocessing": 1,
+    "collections": 1,
+    "resource": 1,
+    "cProfile": 1,
+    "pstats": 1
+  },
+  "stdlib_names": {
+    "argparse": {
+      "*": 5
+    },
+    "ast": {
+      "*": 2
+    },
+    "cProfile": {
+      "*": 1
+    },
+    "calendar": {
+      "*": 3
+    },
+    "collections": {
+      "*": 1
+    },
+    "contextlib": {
+      "*": 1
+    },
+    "copy": {
+      "*": 13
+    },
+    "datetime": {
+      "*": 57
+    },
+    "decimal": {
+      "Decimal": 1,
+      "ROUND_HALF_UP": 1
+    },
+    "difflib": {
+      "*": 1
+    },
+    "fractions": {
+      "Fraction": 1
+    },
+    "functools": {
+      "*": 1
+    },
+    "hashlib": {
+      "*": 2
+    },
+    "importlib": {
+      "*": 4
+    },
+    "io": {
+      "*": 2
+    },
+    "itertools": {
+      "*": 1
+    },
+    "json": {
+      "*": 4
+    },
+    "math": {
+      "*": 3,
+      "floor": 1,
+      "log10": 1
+    },
+    "multiprocessing": {
+      "*": 1
+    },
+    "operator": {
+      "*": 1
+    },
+    "os": {
+      "*": 4
+    },
+    "pathlib": {
+      "Path": 4
+    },
+    "pkgutil": {
+      "*": 2
+    },
+    "pstats": {
+      "*": 1
+    },
+    "random": {
+      "*": 29
+    },
+    "re": {
+      "*": 419
+    },
+    "readline": {
+      "*": 1
+    },
+    "resource": {
+      "*": 1
+    },
+    "string": {
+      "*": 13
+    },
+    "subprocess": {
+      "*": 2
+    },
+    "sys": {
+      "*": 11
+    },
+    "time": {
+      "*": 2
+    },
+    "unicodedata": {
+      "*": 2
+    },
+    "unittest": {
+      "*": 1,
+      "mock": 1
+    }
+  },
+  "third_party": {
+    "pybot": 1,
+    "tools.recon.gen_corpus": 1
+  },
+  "local_imports_top": {
+    "bot.memory.store_lines": 12,
+    "bot.memory": 9,
+    "bot.knowledge.lookup": 7,
+    "bot.knowledge": 5,
+    "bot": 5,
+    "bot.knowledge.crisis_replies": 4,
+    "bot.compose": 3,
+    "bot.knowledge.geography": 2,
+    "bot.memory.corrected": 2,
+    "bot.compose.fit": 1,
+    "bot.modules.memory_store": 1,
+    "bot.knowledge.cooking": 1,
+    "bot.knowledge.study": 1,
+    "bot.understanding": 1,
+    "bot.understanding.normalize": 1,
+    "bot.memory.store_replies": 1
+  },
+  "regex_calls": {
+    "compile": 10197,
+    "search": 1653,
+    "findall": 651,
+    "sub": 499,
+    "escape": 480,
+    "split": 322,
+    "match": 174,
+    "finditer": 101,
+    "fullmatch": 77,
+    "subn": 2
+  },
+  "regex_flags_used": {
+    "I": 5751,
+    "IGNORECASE": 328,
+    "X": 22,
+    "1": 19,
+    "I|S": 10,
+    "I|X": 9,
+    "VERBOSE": 5,
+    "S": 4,
+    "IGNORECASE|VERBOSE": 2,
+    "0": 1
+  },
+  "regex_patterns_total": 12594,
+  "regex_patterns_unresolved": 1082,
+  "regex_feature_totals": {
+    "word_boundary": 9812,
+    "unicode_classes": 7087,
+    "lazy_quantifier": 725,
+    "lookahead": 683,
+    "named_group": 589,
+    "lookbehind": 412,
+    "abs_anchors": 21,
+    "inline_flags": 7,
+    "numbered_backref": 7,
+    "possessive_like": 2,
+    "named_backref": 1,
+    "named_group_ref_syntax": 1
+  },
+  "dynamic_calls": {
+    "getattr": {
+      "count": 210,
+      "sites": [
+        "bot/compose/find_a_place.py:189",
+        "bot/compose/reading.py:1552",
+        "bot/compose/the_course_of_it.py:349",
+        "bot/compose/the_shape_without_the_fact.py:608",
+        "bot/compose/trouble.py:761",
+        "bot/compose/verdict.py:4223",
+        "bot/knowledge/__init__.py:102",
+        "bot/knowledge/__init__.py:162",
+        "bot/knowledge/__init__.py:168",
+        "bot/knowledge/__init__.py:169",
+        "bot/knowledge/__init__.py:174",
+        "bot/knowledge/__init__.py:172",
+        "bot/knowledge/babyfood.py:2328",
+        "bot/knowledge/cooking.py:601",
+        "bot/knowledge/devices.py:499",
+        "bot/knowledge/dishes.py:3173",
+        "bot/knowledge/dishes.py:3937",
+        "bot/knowledge/dishes.py:4185",
+        "bot/knowledge/habits.py:90",
+        "bot/knowledge/home.py:8806",
+        "bot/knowledge/home.py:8807",
+        "bot/knowledge/lookup.py:331",
+        "bot/knowledge/lookup.py:5062",
+        "bot/knowledge/lookup.py:6628",
+        "bot/knowledge/lookup.py:96",
+        "bot/knowledge/lookup.py:5117",
+        "bot/knowledge/lookup.py:6132",
+        "bot/knowledge/lookup.py:6229",
+        "bot/knowledge/lookup.py:6759",
+        "bot/knowledge/lookup.py:6860",
+        "bot/knowledge/lookup.py:7084",
+        "bot/knowledge/lookup.py:7481",
+        "bot/knowledge/lookup.py:7811",
+        "bot/knowledge/lookup.py:4702",
+        "bot/knowledge/lookup.py:4725",
+        "bot/knowledge/lookup.py:4735",
+        "bot/knowledge/lookup.py:6069",
+        "bot/knowledge/lookup.py:6075",
+        "bot/knowledge/lookup.py:6527",
+        "bot/knowledge/lookup.py:6883"
+      ]
+    },
+    "globals()": {
+      "count": 8,
+      "sites": [
+        "bot/compose/fallback.py:11503",
+        "bot/knowledge/entertainment.py:5397",
+        "bot/knowledge/entertainment.py:5240",
+        "bot/knowledge/entertainment.py:5397",
+        "bot/knowledge/entertainment.py:5376",
+        "bot/knowledge/science.py:11359",
+        "bot/memory/repeat.py:1666",
+        "bot/understanding/lexicon.py:1988"
+      ]
+    },
+    "input()": {
+      "count": 1,
+      "sites": [
+        "pybot.py:133"
+      ]
+    },
+    "open()": {
+      "count": 1,
+      "sites": [
+        "tools/recon/verify_corpus.py:52"
+      ]
+    },
+    "setattr": {
+      "count": 1,
+      "sites": [
+        "tests/test_cli.py:45"
+      ]
+    },
+    "vars()": {
+      "count": 4,
+      "sites": [
+        "bot/compose/their_day.py:197",
+        "bot/understanding/lexicon.py:1988",
+        "bot/understanding/lexicon.py:1988",
+        "bot/understanding/lexicon.py:1988"
+      ]
+    }
+  },
+  "dynamic_calls_total": 6,
+  "decorators": {
+    "_sized_by_the_chat_before": 7,
+    "lru_cache": 1,
+    "skipIf": 1
+  },
+  "nondeterminism": {
+    "frozenset()": {
+      "count": 3763,
+      "sites": [
+        "bot/compose/__init__.py:12",
+        "bot/compose/__init__.py:20",
+        "bot/compose/__init__.py:70",
+        "bot/compose/__init__.py:79",
+        "bot/compose/__init__.py:108",
+        "bot/compose/__init__.py:109",
+        "bot/compose/__init__.py:160",
+        "bot/compose/__init__.py:162",
+        "bot/compose/__init__.py:165",
+        "bot/compose/__init__.py:222",
+        "bot/compose/__init__.py:285",
+        "bot/compose/a_place_nobody_can_see.py:78",
+        "bot/compose/a_place_nobody_can_see.py:83",
+        "bot/compose/a_place_nobody_can_see.py:294",
+        "bot/compose/a_place_nobody_can_see.py:295",
+        "bot/compose/a_thing_being_weighed.py:119",
+        "bot/compose/a_thing_wants_doing.py:21",
+        "bot/compose/a_thing_wants_doing.py:32",
+        "bot/compose/a_thing_wants_doing.py:41",
+        "bot/compose/a_trouble.py:67",
+        "bot/compose/a_trouble.py:103",
+        "bot/compose/a_trouble.py:111",
+        "bot/compose/aboutness.py:26",
+        "bot/compose/badnews.py:100",
+        "bot/compose/badnews.py:105",
+        "bot/compose/badnews.py:114",
+        "bot/compose/badnews.py:776",
+        "bot/compose/badnews.py:782",
+        "bot/compose/badnews.py:912",
+        "bot/compose/badnews.py:108",
+        "bot/compose/badnews.py:108",
+        "bot/compose/checking.py:52",
+        "bot/compose/checking.py:58",
+        "bot/compose/checking.py:69",
+        "bot/compose/checking.py:536",
+        "bot/compose/checking.py:570",
+        "bot/compose/checking.py:924",
+        "bot/compose/childwords.py:48",
+        "bot/compose/childwords.py:50",
+        "bot/compose/colour_on_the_body.py:50",
+        "bot/compose/colour_on_the_body.py:64",
+        "bot/compose/colour_on_the_body.py:82",
+        "bot/compose/colour_on_the_body.py:90",
+        "bot/compose/colour_on_the_body.py:96",
+        "bot/compose/colour_on_the_body.py:109",
+        "bot/compose/colour_on_the_body.py:117",
+        "bot/compose/colour_on_the_body.py:122",
+        "bot/compose/doubt.py:82",
+        "bot/compose/draft.py:53",
+        "bot/compose/draft.py:139",
+        "bot/compose/draft.py:147",
+        "bot/compose/draft.py:159",
+        "bot/compose/draft.py:169",
+        "bot/compose/draft.py:180",
+        "bot/compose/draft.py:192",
+        "bot/compose/draft.py:404",
+        "bot/compose/fallback.py:1163",
+        "bot/compose/fallback.py:2103",
+        "bot/compose/fallback.py:2251",
+        "bot/compose/fallback.py:2440"
+      ]
+    },
+    "id()": {
+      "count": 54,
+      "sites": [
+        "bot/knowledge/cooking.py:4042",
+        "bot/knowledge/cooking.py:4043",
+        "bot/knowledge/cooking.py:4044",
+        "bot/knowledge/cooking.py:4045",
+        "bot/knowledge/cooking.py:4046",
+        "bot/knowledge/cooking.py:4047",
+        "bot/knowledge/cooking.py:4048",
+        "bot/knowledge/cooking.py:4053",
+        "bot/knowledge/cooking.py:4053",
+        "bot/knowledge/cooking.py:4053",
+        "bot/knowledge/cooking.py:4054",
+        "bot/knowledge/cooking.py:4054",
+        "bot/knowledge/cooking.py:4054",
+        "bot/knowledge/cooking.py:4274",
+        "bot/knowledge/cooking.py:4274",
+        "bot/knowledge/cooking.py:4274",
+        "bot/knowledge/cooking.py:4275",
+        "bot/knowledge/cooking.py:4275",
+        "bot/knowledge/cooking.py:4275",
+        "bot/knowledge/cooking.py:4276",
+        "bot/knowledge/cooking.py:4278",
+        "bot/knowledge/cooking.py:4278",
+        "bot/knowledge/cooking.py:4278",
+        "bot/knowledge/cooking.py:4279",
+        "bot/knowledge/cooking.py:4279",
+        "bot/knowledge/cooking.py:4279",
+        "bot/knowledge/cooking.py:4280",
+        "bot/knowledge/cooking.py:4703",
+        "bot/knowledge/cooking.py:4371",
+        "bot/knowledge/cooking.py:4705",
+        "bot/knowledge/cooking.py:4360",
+        "bot/knowledge/cooking.py:4374",
+        "bot/knowledge/cooking.py:4364",
+        "bot/knowledge/cooking.py:7192",
+        "bot/knowledge/cooking.py:4708",
+        "bot/knowledge/lookup.py:2951",
+        "bot/knowledge/lookup.py:2968",
+        "bot/knowledge/lookup.py:4373",
+        "bot/knowledge/lookup.py:4612",
+        "bot/knowledge/lookup.py:4624",
+        "bot/knowledge/lookup.py:4658",
+        "bot/knowledge/lookup.py:4672",
+        "bot/knowledge/lookup.py:4721",
+        "bot/knowledge/lookup.py:2981",
+        "bot/knowledge/lookup.py:3012",
+        "bot/knowledge/lookup.py:4387",
+        "bot/knowledge/lookup.py:4741",
+        "bot/knowledge/lookup.py:2991",
+        "bot/knowledge/lookup.py:6494",
+        "bot/knowledge/lookup.py:3165",
+        "bot/knowledge/lookup.py:3181",
+        "bot/knowledge/lookup.py:4711",
+        "bot/knowledge/lookup.py:6503",
+        "bot/modules/saving_followup.py:100"
+      ]
+    },
+    "random.Random": {
+      "count": 23,
+      "sites": [
+        "bot/compose/__init__.py:355",
+        "bot/compose/breakup.py:74",
+        "bot/compose/fallback.py:8470",
+        "bot/compose/fallback.py:9373",
+        "bot/compose/fallback_chain.py:2158",
+        "bot/compose/occasionplan.py:459",
+        "bot/compose/safety_doubt.py:167",
+        "bot/compose/tone_again.py:324",
+        "bot/compose/urgent.py:693",
+        "bot/knowledge/meals.py:891",
+        "bot/memory/choice.py:378",
+        "bot/memory/choice.py:379",
+        "bot/memory/choice.py:655",
+        "bot/memory/kidcount.py:117",
+        "bot/memory/remedy.py:184",
+        "bot/memory/store_replies.py:5381",
+        "bot/memory/store_replies.py:9835",
+        "bot/memory/store_replies.py:3025",
+        "bot/memory/surname.py:99",
+        "bot/memory/whathurts.py:43",
+        "bot/modules/a_day_somebody_else_keeps.py:109",
+        "tools/recon/gen_corpus.py:445",
+        "tools/recon/verify_corpus.py:57"
+      ]
+    },
+    "random.choice": {
+      "count": 4,
+      "sites": [
+        "bot/compose/own_ask.py:253",
+        "bot/memory/back_again.py:259",
+        "bot/memory/callback.py:240",
+        "bot/modules/a_job_that_is_not_a_diy_job.py:200"
+      ]
+    },
+    "random.getstate": {
+      "count": 3,
+      "sites": [
+        "bot/compose/hedge.py:49",
+        "bot/memory/cause.py:383",
+        "bot/modules/confusing.py:83"
+      ]
+    },
+    "random.seed": {
+      "count": 7,
+      "sites": [
+        "pybot.py:181",
+        "pybot.py:143",
+        "tools/recon/gen_corpus.py:402",
+        "tools/recon/profile_bot.py:118",
+        "tools/recon/profile_bot.py:93",
+        "tools/recon/profile_bot.py:130",
+        "tools/recon/verify_corpus.py:24"
+      ]
+    },
+    "random.setstate": {
+      "count": 3,
+      "sites": [
+        "bot/compose/hedge.py:58",
+        "bot/memory/cause.py:392",
+        "bot/modules/confusing.py:90"
+      ]
+    },
+    "set()": {
+      "count": 1509,
+      "sites": [
+        "bot/compose/__init__.py:306",
+        "bot/compose/__init__.py:152",
+        "bot/compose/a_place_nobody_can_see.py:447",
+        "bot/compose/a_place_nobody_can_see.py:443",
+        "bot/compose/a_place_nobody_can_see.py:446",
+        "bot/compose/a_trouble.py:125",
+        "bot/compose/aboutness.py:89",
+        "bot/compose/aboutness.py:100",
+        "bot/compose/aboutness.py:101",
+        "bot/compose/aboutness.py:118",
+        "bot/compose/aboutness.py:120",
+        "bot/compose/checking.py:81",
+        "bot/compose/checking.py:81",
+        "bot/compose/colour_on_the_body.py:240",
+        "bot/compose/colour_on_the_body.py:230",
+        "bot/compose/draft.py:541",
+        "bot/compose/draft.py:360",
+        "bot/compose/draft.py:392",
+        "bot/compose/draft.py:480",
+        "bot/compose/draft.py:490",
+        "bot/compose/draft.py:596",
+        "bot/compose/draft.py:606",
+        "bot/compose/draft.py:651",
+        "bot/compose/draft.py:494",
+        "bot/compose/draft.py:575",
+        "bot/compose/draft.py:711",
+        "bot/compose/draft.py:593",
+        "bot/compose/fallback.py:1771",
+        "bot/compose/fallback.py:1954",
+        "bot/compose/fallback.py:2342",
+        "bot/compose/fallback.py:2556",
+        "bot/compose/fallback.py:2633",
+        "bot/compose/fallback.py:3058",
+        "bot/compose/fallback.py:4159",
+        "bot/compose/fallback.py:5080",
+        "bot/compose/fallback.py:5551",
+        "bot/compose/fallback.py:6496",
+        "bot/compose/fallback.py:7022",
+        "bot/compose/fallback.py:7635",
+        "bot/compose/fallback.py:7638",
+        "bot/compose/fallback.py:7648",
+        "bot/compose/fallback.py:8502",
+        "bot/compose/fallback.py:9335",
+        "bot/compose/fallback.py:10336",
+        "bot/compose/fallback.py:11134",
+        "bot/compose/fallback.py:11758",
+        "bot/compose/fallback.py:12336",
+        "bot/compose/fallback.py:13790",
+        "bot/compose/fallback.py:14062",
+        "bot/compose/fallback.py:14090",
+        "bot/compose/fallback.py:14143",
+        "bot/compose/fallback.py:14180",
+        "bot/compose/fallback.py:14875",
+        "bot/compose/fallback.py:14925",
+        "bot/compose/fallback.py:15929",
+        "bot/compose/fallback.py:16396",
+        "bot/compose/fallback.py:16480",
+        "bot/compose/fallback.py:1848",
+        "bot/compose/fallback.py:1988",
+        "bot/compose/fallback.py:2230"
+      ]
+    },
+    "time.perf_counter": {
+      "count": 6,
+      "sites": [
+        "pybot.py:64",
+        "pybot.py:71",
+        "tools/recon/profile_bot.py:80",
+        "tools/recon/profile_bot.py:82",
+        "tools/recon/profile_bot.py:95",
+        "tools/recon/profile_bot.py:97"
+      ]
+    }
+  },
+  "datetime_sites": [],
+  "set_iteration_sites": []
+}

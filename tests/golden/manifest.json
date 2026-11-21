@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "created_by": "tools/recon/gen_corpus.py",
+  "corpus_seed": 20261121,
+  "pythonhashseed": "0",
+  "python": "3.11.2",
+  "sessions": 2850,
+  "turns": 3062,
+  "corpus_sha256": "d119d44c12a3313fac546320b764e122cf983f19b4897e30beb5afc7bbfb2fba",
+  "schema": {
+    "session": "sNNNN, stable per corpus version",
+    "turn": "0-based turn index inside the session",
+    "input": "exact text fed to runtime.turn",
+    "reply": "runtime reply, normalized with ' '.join(str(reply).split()) as in pybot.py",
+    "module": "winning module name (None when no module proposed / fallback)",
+    "candidates": "[{module, priority}] in arbiter order (replies omitted to keep the file small)",
+    "memory_keys": "sorted keys of the post-turn memory",
+    "memory_digest": "sha1 of the canonical JSON of the FULL post-turn memory",
+    "memory": "post-turn memory minus turns/ and understood/, values truncated to 400 chars"
+  }
+}

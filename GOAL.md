@@ -55,14 +55,14 @@ pybot-rs/
 
 Entender o que existe antes de escrever uma linha de Rust.
 
-- [ ] Clonar `huggingface/pybot`, fixar o commit de referência.
-- [ ] Inventário: linhas por pasta, arquivos de dados, tamanho do `knowledge/`.
-- [ ] Inventário de **imports**: stdlib usada (`re`, `random`, `json`, `difflib`, `unicodedata`, `collections`, `itertools`, `datetime`…) e qualquer dependência de terceiros.
-- [ ] Inventário de **features de regex** realmente usadas: lookahead/lookbehind, backreferences, quantificadores lazy/possessivos, grupos nomeados, flags (`I`, `M`, `S`, `X`, `U`), classes Unicode (`\w`, `\b` com Unicode).
-- [ ] Caça a **dinamismo Python**: `eval`, `exec`, `getattr`, `__import__`, registro de módulos por decorator/reflexão, monkey patching.
-- [ ] Fontes de **não-determinismo**: `random`, `time`, `set` iterado, `hash()`, `id()`.
-- [ ] Profiling do original (`cProfile`, `py-spy`): onde o tempo vai (regex? carga de dados? dispatch?).
-- [ ] **Corpus dourado**: gerar milhares de entradas (dos testes + sessões multi-turno + fuzz de texto) e gravar para cada turno: resposta, módulo vencedor, estado de memória relevante.
+- [x] Clonar `huggingface/pybot`, fixar o commit de referência.
+- [x] Inventário: linhas por pasta, arquivos de dados, tamanho do `knowledge/`.
+- [x] Inventário de **imports**: stdlib usada (`re`, `random`, `json`, `difflib`, `unicodedata`, `collections`, `itertools`, `datetime`…) e qualquer dependência de terceiros.
+- [x] Inventário de **features de regex** realmente usadas: lookahead/lookbehind, backreferences, quantificadores lazy/possessivos, grupos nomeados, flags (`I`, `M`, `S`, `X`, `U`), classes Unicode (`\w`, `\b` com Unicode).
+- [x] Caça a **dinamismo Python**: `eval`, `exec`, `getattr`, `__import__`, registro de módulos por decorator/reflexão, monkey patching.
+- [x] Fontes de **não-determinismo**: `random`, `time`, `set` iterado, `hash()`, `id()`.
+- [x] Profiling do original (`cProfile`, `py-spy`): onde o tempo vai (regex? carga de dados? dispatch?).
+- [x] **Corpus dourado**: gerar milhares de entradas (dos testes + sessões multi-turno + fuzz de texto) e gravar para cada turno: resposta, módulo vencedor, estado de memória relevante.
 
 **Saída:** relatório `docs/recon.md` com os inventários, o perfil de desempenho e o corpus dourado versionado. A lista de features de regex define o escopo da Fase 2.
 
