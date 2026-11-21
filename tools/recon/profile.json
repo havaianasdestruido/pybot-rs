@@ -1,0 +1,97 @@
+{
+  "startup_import_seconds_in_process": 3.686,
+  "rss_mb_after_import": 126.7,
+  "turn_seconds": {
+    "n_prompts": 20,
+    "mean": 0.496,
+    "p50": 0.283,
+    "p95": 0.573,
+    "p99": 4.591,
+    "max": 4.591,
+    "per_prompt": [
+      {
+        "input": "hello",
+        "median_seconds": 0.10719788400001562
+      },
+      {
+        "input": "hi, i'm Sam",
+        "median_seconds": 0.16467694299990399
+      },
+      {
+        "input": "what's my name?",
+        "median_seconds": 4.591166336999777
+      },
+      {
+        "input": "how long should i boil an egg",
+        "median_seconds": 0.39371594900012497
+      },
+      {
+        "input": "my kettle is full of limescale, how do i get rid of it",
+        "median_seconds": 0.4215734699996574
+      },
+      {
+        "input": "why do onions make me cry",
+        "median_seconds": 0.2246822870001779
+      },
+      {
+        "input": "tell me about radiator clatter",
+        "median_seconds": 0.15657885199971133
+      },
+      {
+        "input": "how do i cant afford holiday",
+        "median_seconds": 0.5728901679999581
+      },
+      {
+        "input": "what do you know about elephant live",
+        "median_seconds": 0.3123501749996649
+      },
+      {
+        "input": "i feel sad today",
+        "median_seconds": 0.13715281300028437
+      },
+      {
+        "input": "how do i fix a slow laptop",
+        "median_seconds": 0.3532743869996011
+      },
+      {
+        "input": "what is the capital of france",
+        "median_seconds": 0.25857188199961456
+      },
+      {
+        "input": "tell me a joke",
+        "median_seconds": 0.21369642300032865
+      },
+      {
+        "input": "tell me about the second world war",
+        "median_seconds": 0.1989269499999864
+      },
+      {
+        "input": "how do i fall asleep faster",
+        "median_seconds": 0.33934406100024717
+      },
+      {
+        "input": "how do i save money on groceries",
+        "median_seconds": 0.42862820799973633
+      },
+      {
+        "input": "what temperature should chicken be cooked to",
+        "median_seconds": 0.2829035390000172
+      },
+      {
+        "input": "tell me about puncture fix",
+        "median_seconds": 0.16258613800027888
+      },
+      {
+        "input": "how do i start a business how do i",
+        "median_seconds": 0.38793341200016584
+      },
+      {
+        "input": "i'm nervous about the interview tomorrow",
+        "median_seconds": 0.20301543900040997
+      }
+    ]
+  },
+  "rss_mb_after_100_turns": 212.0,
+  "cprofile_cumulative_top45": "         76305887 function calls (75985032 primitive calls) in 32.074 seconds\n\n   Ordered by: cumulative time\n   List reduced from 5249 to 45 due to restriction <45>\n\n   ncalls  tottime  percall  cumtime  percall filename:lineno(function)\n        1    0.000    0.000   32.076   32.076 /home/user/pybot-rs/tools/recon/profile_bot.py:127(run_battery)\n       12    0.007    0.001   32.075    2.673 /home/user/pybot-rs/bot/runtime.py:82(turn)\n  135/134    0.001    0.000   26.232    0.196 /home/user/pybot-rs/bot/memory/again.py:1107(respond_once)\n  401/307    0.005    0.000   24.747    0.081 /home/user/pybot-rs/bot/knowledge/lookup.py:5128(find)\n  401/307    0.018    0.000   24.731    0.081 /home/user/pybot-rs/bot/knowledge/lookup.py:5558(_the_best_entry)\n       70    0.000    0.000   22.325    0.319 /home/user/pybot-rs/bot/memory/paragraph.py:103(a_reply_framed_as_the_repeat_it_is)\n       70    0.007    0.000   22.303    0.319 /home/user/pybot-rs/bot/modules/answers.py:8331(respond)\n       70    0.010    0.000   22.251    0.318 /home/user/pybot-rs/bot/modules/answers.py:9060(_answer)\n  424/330    0.007    0.000   18.829    0.057 /home/user/pybot-rs/bot/knowledge/lookup.py:7179(_best)\n      168    0.136    0.001   16.085    0.096 /home/user/pybot-rs/bot/knowledge/lookup.py:6161(_defines)\n   158874    7.738    0.000   14.424    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:5977(_the_key_names_the_thing)\n       36    0.002    0.000   13.819    0.384 /home/user/pybot-rs/bot/modules/memory_store.py:4191(respond)\n       36    0.003    0.000   13.802    0.383 /home/user/pybot-rs/bot/memory/store_replies.py:3108(_the_store_reply)\n       36    0.005    0.000   13.464    0.374 /home/user/pybot-rs/bot/memory/store_replies.py:4479(_respond)\n       68    0.000    0.000   13.307    0.196 /home/user/pybot-rs/bot/memory/store_replies.py:7407(_the_ask_beats_the_receipt)\n       44    0.001    0.000   13.306    0.302 /home/user/pybot-rs/bot/memory/store_replies.py:7386(_the_answer_the_ask_gets)\n       12    0.000    0.000   12.645    1.054 /home/user/pybot-rs/bot/modules/said_fact_back.py:141(respond)\n  191/120    0.002    0.000   12.492    0.104 /home/user/pybot-rs/bot/knowledge/lookup.py:7358(_other_reading)\n       36    0.000    0.000    9.863    0.274 /home/user/pybot-rs/bot/memory/store_replies.py:7421(_a_diet_told)\n       12    0.000    0.000    7.803    0.650 /home/user/pybot-rs/bot/modules/said_fact_back.py:46(_the_store_would_say)\n      424    0.002    0.000    7.580    0.018 /home/user/pybot-rs/bot/knowledge/lookup.py:7215(rank)\n      424    0.002    0.000    7.573    0.018 /home/user/pybot-rs/bot/knowledge/lookup.py:6474(_line_rows)\n       18    0.028    0.002    7.453    0.414 /home/user/pybot-rs/bot/knowledge/lookup.py:6509(_scanned_rows)\n    51670    0.198    0.000    7.412    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:3850(score)\n   211926    0.081    0.000    6.254    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:3016(_part_match)\n   211956    0.831    0.000    6.174    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:2972(_part_matches)\n       11    0.000    0.000    4.841    0.440 /home/user/pybot-rs/bot/modules/said_fact_back.py:65(_someone_answers_it)\n       12    0.000    0.000    4.590    0.382 /home/user/pybot-rs/bot/modules/thing_i_did_with.py:180(respond)\n  3126433    0.778    0.000    4.381    0.000 {built-in method builtins.all}\n      420    0.004    0.000    4.091    0.010 /home/user/pybot-rs/bot/understanding/__init__.py:1557(understand)\n       70    0.018    0.000    4.078    0.058 /home/user/pybot-rs/bot/modules/answers.py:10759(_respond)\n   509422    0.373    0.000    4.074    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:2698(_phrase_span)\n      420    0.053    0.000    4.074    0.010 /home/user/pybot-rs/bot/understanding/__init__.py:1891(_read_line)\n       12    0.000    0.000    3.952    0.329 /home/user/pybot-rs/bot/modules/talkto.py:124(respond)\n   226968    0.218    0.000    3.656    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:2882(_phrase_span_work)\n       36    0.000    0.000    3.484    0.097 /home/user/pybot-rs/bot/memory/store_replies.py:8515(_a_state_told)\n  5780742    1.719    0.000    3.329    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:5994(<genexpr>)\n       12    0.001    0.000    3.231    0.269 /home/user/pybot-rs/bot/modules/chat.py:14163(respond)\n       15    0.004    0.000    3.208    0.214 /home/user/pybot-rs/bot/modules/chat.py:15620(_respond)\n       13    0.000    0.000    3.120    0.240 /home/user/pybot-rs/bot/modules/chat.py:4818(_intent)\n        3    0.000    0.000    3.119    1.040 /home/user/pybot-rs/bot/modules/chat.py:4791(_answers_it)\n       12    0.000    0.000    3.099    0.258 /home/user/pybot-rs/bot/modules/talkto.py:92(_the_entry_the_line_reached)\n   238488    0.306    0.000    2.232    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:2894(_phrase_span_spelling)\n  3557190    1.114    0.000    2.076    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:1772(_forms)\n   239699    0.592    0.000    1.790    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:2532(_wanted)\n\n\n",
+  "cprofile_tottime_top45": "         76305887 function calls (75985032 primitive calls) in 32.074 seconds\n\n   Ordered by: internal time\n   List reduced from 5249 to 45 due to restriction <45>\n\n   ncalls  tottime  percall  cumtime  percall filename:lineno(function)\n   158874    7.738    0.000   14.424    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:5977(_the_key_names_the_thing)\n  5780742    1.719    0.000    3.329    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:5994(<genexpr>)\n  7739337    1.617    0.000    1.617    0.000 {method 'get' of 'dict' objects}\n  3557190    1.114    0.000    2.076    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:1772(_forms)\n 13929235    0.968    0.000    0.968    0.000 {built-in method builtins.len}\n  6058733    0.926    0.000    0.926    0.000 {method 'split' of 'str' objects}\n   211956    0.831    0.000    6.174    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:2972(_part_matches)\n  6748500    0.785    0.000    0.785    0.000 {method 'lower' of 'str' objects}\n  3126433    0.778    0.000    4.381    0.000 {built-in method builtins.all}\n  7394551    0.697    0.000    0.697    0.000 {built-in method builtins.isinstance}\n   225651    0.682    0.000    0.892    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:2862(_work_out_the_same_words)\n   633107    0.643    0.000    1.020    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:2539(<genexpr>)\n   547213    0.600    0.000    0.600    0.000 {method 'search' of 're.Pattern' objects}\n   239699    0.592    0.000    1.790    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:2532(_wanted)\n     1680    0.574    0.000    1.209    0.001 /home/user/pybot-rs/bot/understanding/topics.py:2443(score_topics)\n   498011    0.512    0.000    0.888    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:2578(_wanted_bare)\n   586894    0.422    0.000    0.422    0.000 {method 'translate' of 'str' objects}\n   614195    0.413    0.000    0.532    0.000 /usr/lib/python3.11/re/__init__.py:272(_compile)\n   509422    0.373    0.000    4.074    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:2698(_phrase_span)\n   238488    0.306    0.000    2.232    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:2894(_phrase_span_spelling)\n      260    0.302    0.001    0.441    0.002 /home/user/pybot-rs/bot/knowledge/lookup.py:7723(<setcomp>)\n   218705    0.300    0.000    0.427    0.000 /home/user/pybot-rs/bot/knowledge/dishes.py:756(_same_word)\n315512/7189    0.296    0.000    0.555    0.000 /usr/lib/python3.11/copy.py:128(deepcopy)\n      168    0.294    0.002    0.427    0.003 /home/user/pybot-rs/bot/knowledge/lookup.py:6052(_the_name_card)\n  3781384    0.283    0.000    0.283    0.000 {built-in method builtins.getattr}\n   226776    0.244    0.000    1.206    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:2847(_the_same_words)\n   226968    0.218    0.000    3.656    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:2882(_phrase_span_work)\n    47312    0.214    0.000    0.999    0.000 /home/user/pybot-rs/bot/knowledge/dishes.py:715(_phrase_in)\n   474129    0.213    0.000    0.581    0.000 /usr/lib/python3.11/re/__init__.py:253(escape)\n151601/149225    0.211    0.000    1.420    0.000 {built-in method builtins.any}\n    16078    0.203    0.000    0.306    0.000 /home/user/pybot-rs/bot/understanding/topics.py:2350(_family)\n  1803221    0.201    0.000    0.201    0.000 {method 'endswith' of 'str' objects}\n    51670    0.198    0.000    7.412    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:3850(score)\n      276    0.184    0.001    1.386    0.005 /home/user/pybot-rs/bot/understanding/kinds.py:2128(emotion_of)\n   318307    0.164    0.000    0.528    0.000 /usr/lib/python3.11/re/__init__.py:218(finditer)\n321846/320669    0.149    0.000    0.343    0.000 {method 'join' of 'str' objects}\n   129550    0.143    0.000    0.143    0.000 {method 'findall' of 're.Pattern' objects}\n      168    0.136    0.001   16.085    0.096 /home/user/pybot-rs/bot/knowledge/lookup.py:6161(_defines)\n   249475    0.129    0.000    0.511    0.000 /usr/lib/python3.11/re/__init__.py:173(search)\n   325205    0.128    0.000    0.157    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:2651(_line_forms)\n   392031    0.127    0.000    0.164    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:4105(<genexpr>)\n   100573    0.123    0.000    0.411    0.000 /home/user/pybot-rs/bot/understanding/kinds.py:5568(denied)\n   400808    0.117    0.000    0.481    0.000 /home/user/pybot-rs/bot/knowledge/dishes.py:723(<genexpr>)\n   357505    0.114    0.000    0.114    0.000 {method 'finditer' of 're.Pattern' objects}\n   170183    0.110    0.000    1.580    0.000 /home/user/pybot-rs/bot/knowledge/lookup.py:324(guard_passes)\n\n\n"
+}
