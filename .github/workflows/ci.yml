@@ -58,7 +58,29 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          cargo test --all-targets --locked 2>&1 | tee test-output.txt
+          # One suite at a time, each summarised in the log, so a matrix failure names the
+          # binary (unit tests, golden, registry, style guards, differential) on the first look.
+          {
+            echo "::group::lib"
+            cargo test --locked --lib 2>&1
+            echo "::endgroup::"
+            echo "::group::bin differential"
+            cargo test --locked --bin differential 2>&1
+            echo "::endgroup::"
+            echo "::group::bin pybot"
+            cargo test --locked --bin pybot 2>&1
+            echo "::endgroup::"
+            echo "::group::test golden"
+            cargo test --locked --test golden 2>&1
+            echo "::endgroup::"
+            echo "::group::test registry"
+            cargo test --locked --test registry 2>&1
+            echo "::endgroup::"
+            echo "::group::test style_guards"
+            cargo test --locked --test style_guards 2>&1
+            echo "::endgroup::"
+          } 2>&1 | tee test-output.txt
+          exit "${PIPESTATUS[0]}"
       - name: cargo test (release, same tests, optimised)
         if: success()
         shell: bash
