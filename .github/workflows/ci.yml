@@ -52,6 +52,7 @@ jobs:
       - name: cargo build (release)
         run: cargo build --release --locked
       - name: cargo clippy (deny warnings)
+        shell: bash
         run: cargo clippy --all-targets --all-features --locked -- -D warnings
       - name: cargo test
         shell: bash
@@ -68,7 +69,13 @@ jobs:
         run: |
           # The step log is the one place that survives every runner; print the failing tests
           # and their panic messages inline so the reason is visible without downloading anything.
-          grep -E "^(failures:|test .* FAILED|---- .* stdout ----|thread .* panicked|assertion|  left:|  right:|error)" -A6 test-output.txt || tail -100 test-output.txt
+          # Match both `cargo test`'s failure blocks and compiler errors, and fall back to the
+          # raw tail so nothing is lost.
+          {
+            grep -nE "^(error(\[|:)|warning: unused|failures:|    [a-z0-9_:]+::|---- |thread |assertion|  left:|  right:|test result)" -A8 test-output.txt
+          } || true
+          echo "=== last 120 lines ==="
+          tail -120 test-output.txt
       - name: Upload failure output
         if: failure()
         uses: actions/upload-artifact@v4
