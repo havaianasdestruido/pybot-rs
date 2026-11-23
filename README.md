@@ -1,5 +1,28 @@
 <p align="center"><img src="assets/banner.png" alt="PyBot: no weights, no training, just rules" width="100%"></p>
 
+> ## The Rust port (`pybot-rs`)
+>
+> This fork carries a **second implementation of PyBot in Rust, standard library only**: no
+> crates, no Python at runtime, `#![forbid(unsafe_code)]`, no panics on any input. It is being
+> ported phase by phase against the Python bot as an oracle — see [`GOAL.md`](GOAL.md) for the
+> plan and [`docs/recon.md`](docs/recon.md) / [`docs/fase1.md`](docs/fase1.md) for what is done.
+>
+> ```sh
+> cargo build --release
+> ./target/release/pybot -p "hello"          # one reply
+> ./target/release/pybot                    # interactive chat (stdin is a terminal)
+> echo "hello" | ./target/release/pybot     # one reply per line
+> cargo run --release --bin differential -- tests/golden   # differential report
+> ```
+>
+> The port runs the **golden corpus** (3 062 turns from 2 850 sessions recorded from the Python
+> bot) and reports agreement per block and per module: reply, winning module, candidate list,
+> memory keys and a SHA-1 of the full memory. Fase 1 starts at 2.78 % reply agreement — the
+> harness is the deliverable, and every later phase is measured by it.
+>
+> Rust sources live in `src/`, the reference Python implementation in `bot/` and `pybot.py`,
+> the development tools (corpus generator, registry exporter) in `tools/`.
+
 <div align="center">
   <a href="https://huggingface.co/spaces/HuggingFaceSwarms/PyBot" target="_blank">
     <img alt="Hugging Face Space: PyBot demo" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Demo-ffc107?color=ffc107&logoColor=white" />
