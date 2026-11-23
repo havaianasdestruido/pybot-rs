@@ -89,15 +89,24 @@ jobs:
         if: failure()
         shell: bash
         run: |
-          # The step log is the one place that survives every runner; print the failing tests
-          # and their panic messages inline so the reason is visible without downloading anything.
-          # Match both `cargo test`'s failure blocks and compiler errors, and fall back to the
-          # raw tail so nothing is lost.
-          {
-            grep -nE "^(error(\[|:)|warning: unused|failures:|    [a-z0-9_:]+::|---- |thread |assertion|  left:|  right:|test result)" -A8 test-output.txt
-          } || true
-          echo "=== last 120 lines ==="
-          tail -120 test-output.txt
+          # `::error::` lines become check-run annotations, which are readable through the API
+          # even when the runner's blob-storage log is not. Emit the failing test names, the
+          # panic messages and any compiler error, capped so GitHub accepts them.
+          python3 - <<'PY'
+          import pathlib, re
+          lines = pathlib.Path("test-output.txt").read_text(encoding="utf-8", errors="replace").splitlines()
+          picked = []
+          for i, line in enumerate(lines):
+              if re.match(r"^(error(\[|:)|failures:|thread .* panicked|---- .* stdout ----|test .* FAILED|assertion)", line):
+                  picked.extend(lines[i:i + 5])
+                  if len(picked) > 120:
+                      break
+          if not picked:
+              picked = lines[-40:]
+          for line in picked[:40]:
+              cleaned = line.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(f"::error::{cleaned[:900]}")
+          PY
       - name: Upload failure output
         if: failure()
         uses: actions/upload-artifact@v4
