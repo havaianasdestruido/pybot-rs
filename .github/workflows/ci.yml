@@ -62,6 +62,13 @@ jobs:
         if: success()
         shell: bash
         run: cargo test --release --all-targets --locked
+      - name: Print failure summary
+        if: failure()
+        shell: bash
+        run: |
+          # The step log is the one place that survives every runner; print the failing tests
+          # and their panic messages inline so the reason is visible without downloading anything.
+          grep -E "^(failures:|test .* FAILED|---- .* stdout ----|thread .* panicked|assertion|  left:|  right:|error)" -A6 test-output.txt || tail -100 test-output.txt
       - name: Upload failure output
         if: failure()
         uses: actions/upload-artifact@v4
