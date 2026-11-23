@@ -88,25 +88,19 @@ jobs:
       - name: Print failure summary
         if: failure()
         shell: bash
+        # `::error::` lines become check-run annotations, which the API serves even when the
+        # runner's blob-storage log is unreachable. bash, not python3: on Windows `python3` is
+        # the Store stub. Capped per line so GitHub accepts the annotation.
         run: |
-          # `::error::` lines become check-run annotations, which are readable through the API
-          # even when the runner's blob-storage log is not. Emit the failing test names, the
-          # panic messages and any compiler error, capped so GitHub accepts them.
-          python3 - <<'PY'
-          import pathlib, re
-          lines = pathlib.Path("test-output.txt").read_text(encoding="utf-8", errors="replace").splitlines()
-          picked = []
-          for i, line in enumerate(lines):
-              if re.match(r"^(error(\[|:)|failures:|thread .* panicked|---- .* stdout ----|test .* FAILED|assertion)", line):
-                  picked.extend(lines[i:i + 5])
-                  if len(picked) > 120:
-                      break
-          if not picked:
-              picked = lines[-40:]
-          for line in picked[:40]:
-              cleaned = line.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-              print(f"::error::{cleaned[:900]}")
-          PY
+          [ -f test-output.txt ] || exit 0
+          grep -aE '^(error(\[|:)|failures:|thread .* panicked|---- .* stdout ----|test .* FAILED|assertion)' test-output.txt \
+            | head -40 \
+            | while IFS= read -r line; do
+                cleaned=${line//'%'/'%25'}
+                cleaned=${cleaned//$'\r'/'%0D'}
+                echo "::error::${cleaned:0:900}"
+              done
+          exit 0
       - name: Upload failure output
         if: failure()
         uses: actions/upload-artifact@v4
