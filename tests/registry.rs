@@ -477,6 +477,33 @@ fn the_registry_metadata_is_a_pure_function_of_the_table() {
 
 // ---------------------------------------------------------------------------- the exporter
 
+/// A working Python interpreter, or `None`.
+///
+/// GitHub's Linux and macOS runners provide `python3`; the Windows image provides `python`
+/// (and a `python3` shim that resolves to the Store stub, which is not a real interpreter).
+/// The exporter tests are a convenience — the drift test above is the guarantee — so when no
+/// interpreter runs, they skip instead of failing the matrix.
+fn python() -> Option<std::process::Command> {
+    for candidate in ["python3", "python"] {
+        let Ok(output) = std::process::Command::new(candidate)
+            .arg("--version")
+            .output()
+        else {
+            continue;
+        };
+        if output.status.success() {
+            return Some(std::process::Command::new(candidate));
+        }
+    }
+    None
+}
+/// `\r\n` -> `\n`, so a Windows checkout or a Python `print()` writing to a Windows pipe (both
+/// translate newlines) cannot make this comparison fail on an end-of-line difference. A real
+/// drift — a priority, a name, a hook — still fails.
+fn normalise_newlines(text: &str) -> String {
+    text.replace("\r\n", "\n")
+}
+
 #[test]
 fn the_export_script_reproduces_the_committed_table_exactly() {
     // `tools/export_registry.py` (no flags) prints the table it would write. The committed
@@ -489,13 +516,16 @@ fn the_export_script_reproduces_the_committed_table_exactly() {
         // table against `bot/modules/`.
         return;
     }
-    let output = std::process::Command::new("python3")
+    let Some(mut command) = python() else {
+        return; // no interpreter on this machine: skip, keep the AST comparison
+    };
+    let output = command
         .arg(&script)
         .arg("--modules")
         .arg(root.join("bot/modules"))
         .output();
     let Ok(output) = output else {
-        return; // no python3 on this machine: skip the byte comparison, keep the AST one
+        return;
     };
     if !output.status.success() {
         panic!(
@@ -503,8 +533,11 @@ fn the_export_script_reproduces_the_committed_table_exactly() {
             String::from_utf8_lossy(&output.stderr)
         );
     }
-    let generated = String::from_utf8(output.stdout)
-        .expect("UTF-8 table")
+    // Compare *content*, not checkout artifacts: a Windows checkout may hand the file CRLF
+    // while the exporter (Python, `\n`) writes LF. Normalise both sides before comparing, so
+    // the test still fails on a real drift (a priority, a name, a hook) and never on an
+    // end-of-line difference, which `.gitattributes` already controls for the repository.
+    let generated = normalise_newlines(&String::from_utf8(output.stdout).expect("UTF-8 table"))
         .replace("#[rustfmt::skip]\n", "");
     let committed =
         std::fs::read_to_string(root.join("src/modules/registry.rs")).expect("registry");
@@ -513,8 +546,10 @@ fn the_export_script_reproduces_the_committed_table_exactly() {
         .expect("the table");
     let index_start = committed.find("pub const NAME_INDEX").expect("index");
     let end = committed[index_start..].find("];").expect("end of index") + index_start + 2;
+    let committed_table =
+        normalise_newlines(&committed[start..end]).replace("#[rustfmt::skip]\n", "");
     assert_eq!(
-        committed[start..end].replace("#[rustfmt::skip]\n", ""),
+        committed_table,
         generated.trim(),
         "`python3 tools/export_registry.py --write` would change the committed table"
     );
@@ -527,7 +562,10 @@ fn the_export_script_summarises_the_hook_population() {
     if !script.exists() {
         return;
     }
-    let output = std::process::Command::new("python3")
+    let Some(mut command) = python() else {
+        return;
+    };
+    let output = command
         .arg(&script)
         .arg("--modules")
         .arg(root.join("bot/modules"))
