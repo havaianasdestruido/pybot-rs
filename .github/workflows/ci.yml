@@ -54,9 +54,22 @@ jobs:
       - name: cargo clippy (deny warnings)
         run: cargo clippy --all-targets --all-features --locked -- -D warnings
       - name: cargo test
-        run: cargo test --all-targets --locked
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --all-targets --locked 2>&1 | tee test-output.txt
       - name: cargo test (release, same tests, optimised)
+        if: success()
+        shell: bash
         run: cargo test --release --all-targets --locked
+      - name: Upload failure output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output-${{ matrix.os }}
+          path: test-output.txt
+          if-no-files-found: ignore
+          retention-days: 7
 
   # ------------------------------------------------------------------ std-only guard
   std-only:
