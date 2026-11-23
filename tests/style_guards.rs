@@ -43,14 +43,15 @@ fn sources() -> Vec<(String, String)> {
                 stack.push(path);
             } else if path.extension().is_some_and(|extension| extension == "rs") {
                 // `Path::display` uses `\` on Windows, and the guards match on `/` when they
-                // ask "is this a binary or a test?". Normalise once, here.
+                // ask "is this a binary or a test?". Normalise once, here; a plain
+                // replacement behaves the same on every host, unlike a `components()` join
+                // (on a POSIX host a backslash is an ordinary filename character).
                 let relative = path
                     .strip_prefix(env!("CARGO_MANIFEST_DIR"))
                     .expect("under the manifest dir")
-                    .components()
-                    .map(|component| component.as_os_str().to_string_lossy())
-                    .collect::<Vec<_>>()
-                    .join("/");
+                    .display()
+                    .to_string()
+                    .replace('\\', "/");
                 let contents = std::fs::read_to_string(&path)
                     .unwrap_or_else(|error| panic!("read {relative}: {error}"));
                 files.push((relative, contents));
