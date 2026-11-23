@@ -42,11 +42,15 @@ fn sources() -> Vec<(String, String)> {
             if path.is_dir() {
                 stack.push(path);
             } else if path.extension().is_some_and(|extension| extension == "rs") {
+                // `Path::display` uses `\` on Windows, and the guards match on `/` when they
+                // ask "is this a binary or a test?". Normalise once, here.
                 let relative = path
                     .strip_prefix(env!("CARGO_MANIFEST_DIR"))
                     .expect("under the manifest dir")
-                    .display()
-                    .to_string();
+                    .components()
+                    .map(|component| component.as_os_str().to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join("/");
                 let contents = std::fs::read_to_string(&path)
                     .unwrap_or_else(|error| panic!("read {relative}: {error}"));
                 files.push((relative, contents));
@@ -320,7 +324,7 @@ fn the_library_does_not_print() {
     // The only modules allowed to write to stdout are the CLI and the two binaries, and they
     // all go through an explicit writer.
     for (path, source) in sources() {
-        if path.ends_with("cli.rs") || path.contains("bin/") {
+        if path.ends_with("cli.rs") || path.contains("bin/") || path.contains("\\") {
             continue;
         }
         let (production, _) = production_and_test(&source);
