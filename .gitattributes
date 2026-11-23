@@ -1,0 +1,24 @@
+# The crate is built and tested on Linux, macOS and Windows. Git must hand every checkout the
+# same bytes, or the golden corpus hash stops matching and the differential report changes with
+# the developer's `core.autocrlf`.
+*
+text=auto
+
+# Source, data and docs: line endings are part of the contract (the corpus SHA-256 and the
+# byte-identical `--help` text are both asserted by tests).
+*.rs       text eol=lf
+*.toml     text eol=lf
+*.json     text eol=lf
+*.jsonl    text eol=lf
+*.md       text eol=lf
+*.py       text eol=lf
+*.yml      text eol=lf
+*.yaml     text eol=lf
+*.sh       text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+
+# Binary assets stay binary.
+*.png binary
+*.jpg binary
+*.gif binary
