@@ -374,12 +374,27 @@ fn the_ci_workflow_runs_every_gate() {
     for gate in [
         "cargo fmt --all -- --check",
         "cargo clippy --all-targets",
-        "cargo test --all-targets",
         "cargo build --all-targets",
         "cargo build --release",
     ] {
         assert!(workflow.contains(gate), "the workflow must run `{gate}`");
     }
+    // Every target (lib, bins, integration tests), in at least one profile. CI may split the
+    // debug run per target for readable logs, so look at the `cargo test` lines themselves
+    // rather than at one exact command line.
+    let test_lines: Vec<&str> = workflow
+        .lines()
+        .map(str::trim)
+        .filter(|line| {
+            let line = line.strip_prefix("run:").unwrap_or(line).trim();
+            line.starts_with("cargo test")
+        })
+        .collect();
+    assert!(!test_lines.is_empty(), "the workflow must run `cargo test`");
+    assert!(
+        test_lines.iter().any(|line| line.contains("--all-targets")),
+        "some `cargo test` invocation must pass `--all-targets`; found {test_lines:?}"
+    );
     // Warnings are errors in CI (the local deny list is not enough: `-D warnings` is stricter).
     assert!(workflow.contains("-D warnings"));
     // CI must not need the network, or a dependency could sneak in unnoticed.
