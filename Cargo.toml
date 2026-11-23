@@ -1,0 +1,59 @@
+# PyBot, rewritten in Rust with **only** the standard library (see GOAL.md).
+#
+# Hard rules encoded here:
+#   * there is no `[dependencies]` table at all — `cargo build` cannot pull a crate;
+#   * the whole crate is `#![forbid(unsafe_code)]` (src/lib.rs);
+#   * panicking APIs are denied crate-wide for production code (unwrap/expect/index/panic),
+#     test code opts back into them explicitly with an inner `#![allow(...)]`;
+#   * the MSRV is fixed and pinned by `rust-toolchain.toml` (1.97.0).
+[package]
+name = "pybot"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.97.0"
+description = "PyBot rewritten in Rust, standard library only: same rules, no Python at runtime"
+readme = "README.md"
+license = "Apache-2.0"
+repository = "https://github.com/havaianasdestruido/pybot-rs"
+publish = false
+
+[lib]
+name = "pybot"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pybot"
+path = "src/main.rs"
+
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = { level = "warn", priority = -1 }
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[lints.clippy]
+# The GOAL.md stability rules, enforced at the compiler level.
+unwrap_used = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+undocumented_unsafe_blocks = "deny"
+# Hygiene lints that keep the std-only surface honest.
+print_stdout = "warn"
+print_stderr = "warn"
+dbg_macro = "deny"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+overflow-checks = true
+debug = false
+
+[profile.bench]
+inherits = "release"
+
+# Tests spend most of their time parsing the golden corpus; keep them fast but checked.
+[profile.test]
+opt-level = 1

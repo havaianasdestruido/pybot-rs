@@ -5,3 +5,5 @@ __pycache__/
 build/
 dist/
 .DS_Store
+# Rust build artifacts (the crate has no dependencies, so `Cargo.lock` is committed).
+/target/

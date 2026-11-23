@@ -1,0 +1,127 @@
+name: CI
+
+# Fase 1 gate (GOAL.md): cargo build, clippy, test and formatting must be green.
+# The toolchain is pinned by rust-toolchain.toml (MSRV 1.97.0), so CI and developers
+# compile with the exact same compiler and lints.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  # Keep CI offline-safe: the crate has no dependencies, so it never needs the network.
+  CARGO_NET_OFFLINE: "true"
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ------------------------------------------------------------------ formatting
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show toolchain
+        run: rustc --version && cargo --version
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+  # ------------------------------------------------------------------ build + tests
+  test:
+    name: build, clippy, test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show toolchain
+        run: rustc --version && cargo --version
+      - name: cargo build (debug)
+        run: cargo build --all-targets --locked
+      - name: cargo build (release)
+        run: cargo build --release --locked
+      - name: cargo clippy (deny warnings)
+        run: cargo clippy --all-targets --all-features --locked -- -D warnings
+      - name: cargo test
+        run: cargo test --all-targets --locked
+      - name: cargo test (release, same tests, optimised)
+        run: cargo test --release --all-targets --locked
+
+  # ------------------------------------------------------------------ std-only guard
+  std-only:
+    name: no dependencies, no unsafe
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cargo.toml declares zero dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import tomllib
+          with open("Cargo.toml", "rb") as handle:
+              manifest = tomllib.load(handle)
+          for section in ("dependencies", "dev-dependencies", "build-dependencies"):
+              declared = manifest.get(section) or {}
+              assert declared == {}, f"{section} must stay empty, found: {declared}"
+          print("Cargo.toml: zero dependencies in every section")
+          PY
+      - name: There is no Cargo.lock with registry crates
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f Cargo.lock ]; then
+            python3 - <<'PY'
+          import re
+          text = open("Cargo.lock", encoding="utf-8").read()
+          packages = re.findall(r'^name = "([^"]+)"', text, flags=re.M)
+          external = [p for p in packages if p != "pybot"]
+          assert not external, f"unexpected registry crates: {external}"
+          print("Cargo.lock: only the pybot package")
+          PY
+          fi
+      - name: unsafe is forbidden outside the Fase 11 ffi module
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '#!\[forbid(unsafe_code)\]' src/lib.rs
+          if grep -rn --include='*.rs' -E '\bunsafe\b[[:space:]]*\{' src/; then
+            echo "::error::unsafe blocks found in src/ (only src/ffi.rs may have them, Fase 11)"
+            exit 1
+          fi
+          echo "src/: no unsafe blocks"
+
+  # ------------------------------------------------------------------ golden harness
+  golden:
+    name: differential harness (${{ matrix.profile }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        profile: [debug, release]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show toolchain
+        run: rustc --version && cargo --version
+      - name: Golden corpus runs (harness smoke, both profiles)
+        if: matrix.profile == 'debug'
+        run: cargo test --locked --test golden -- --nocapture
+      - name: Golden corpus runs (optimised)
+        if: matrix.profile == 'release'
+        run: cargo test --release --locked --test golden -- --nocapture
+      - name: Registry matches the Python reference
+        run: cargo test --locked --test registry
+      - name: Project rules are enforced as tests
+        run: cargo test --locked --test style_guards
+      - name: Differential report is writable end to end
+        run: cargo run --release --locked --bin differential -- tests/golden
