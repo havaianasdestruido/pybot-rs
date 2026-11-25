@@ -34,8 +34,13 @@ import sys
 
 HOOKS = ("after", "choose", "observe", "respond")
 
-#: `PRIORITY = 9000  # the safety band…` and `PRIORITY = -999.5` both parse.
-PRIORITY_RE = re.compile(r"^PRIORITY\s*=\s*(-?\d+(?:\.\d+)?)", re.MULTILINE)
+#: `PRIORITY = 9000  # the safety band…`, `PRIORITY = -999.5` and `PRIORITY = 9_000` all
+#: parse. Underscores are Python digit separators: the literal is captured whole (so `9_000` is
+#: not silently truncated to `9`) and removed before `int()`/`float()`.
+PRIORITY_RE = re.compile(
+    r"^PRIORITY\s*=\s*(-?(?:\d(?:[\d_]*(?:\d))?)(?:\.(?:\d(?:[\d_]*\d)?))?)",
+    re.MULTILINE,
+)
 
 
 def module_metadata(path: pathlib.Path) -> tuple[str, float | int, list[str]]:
@@ -45,7 +50,7 @@ def module_metadata(path: pathlib.Path) -> tuple[str, float | int, list[str]]:
     if match is None:
         priority: float | int = 0
     else:
-        raw = match.group(1)
+        raw = match.group(1).replace("_", "")
         priority = int(raw) if "." not in raw else float(raw)
     hooks = [hook for hook in HOOKS if re.search(rf"^def {hook}\(", source, re.MULTILINE)]
     return path.stem, priority, hooks

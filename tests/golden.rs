@@ -186,6 +186,34 @@ fn every_digest_is_a_lowercase_sha1_and_every_reply_is_normalised() {
 }
 
 #[test]
+fn the_raw_jsonl_digests_are_lowercase_before_any_normalisation() {
+    // `Corpus::parse` accepts hex of either case and normalises; the *file* must already be
+    // lowercase, so a generator that started emitting uppercase is caught here rather than
+    // being silently accepted.
+    let raw = std::fs::read_to_string(corpus_dir().join("corpus.jsonl")).expect("corpus.jsonl");
+    let mut seen = 0;
+    for (line_number, line) in raw.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let value = json::parse_str(line).expect("every raw line is valid JSON");
+        let digest = value
+            .get("memory_digest")
+            .and_then(Json::as_str)
+            .unwrap_or_else(|| panic!("line {} has no digest", line_number + 1));
+        assert!(
+            digest
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
+            "line {}: digest is not lowercase hex: {digest}",
+            line_number + 1
+        );
+        seen += 1;
+    }
+    assert_eq!(seen, 3_062, "every raw line was inspected");
+}
+
+#[test]
 fn the_hard_inputs_the_generator_threw_at_the_bot_are_all_there() {
     // Spot-check the adversarial tail of the curated block: empty, whitespace, punctuation,
     // emoji, RTL-ish combining text, regex metacharacters, NUL, and the 1 004-character reply.
@@ -560,6 +588,44 @@ fn the_replay_is_deterministic_across_runs_and_instances() {
     assert_eq!(first, other.render_text());
 }
 
+#[test]
+fn the_report_is_byte_identical_across_two_processes() {
+    // In-process replays catch state carried between runs; only a second process catches
+    // anything seeded once per process (a hash seed, an address, an iteration order). Run the
+    // real binary twice with the same corpus and compare the bytes.
+    // Cargo defines this for integration tests when the package has that binary.
+    let binary = env!("CARGO_BIN_EXE_differential");
+    let run = |suffix: &str| -> Vec<u8> {
+        let output = std::process::Command::new(binary)
+            .arg(corpus_dir())
+            .arg("--quiet")
+            .arg("--json")
+            .arg(std::env::temp_dir().join(format!(
+                "pybot-determinism-{}-{suffix}.json",
+                std::process::id()
+            )))
+            .output()
+            .expect("run the differential binary");
+        assert!(output.status.success(), "differential failed: {:?}", output);
+        std::fs::read(std::env::temp_dir().join(format!(
+            "pybot-determinism-{}-{suffix}.json",
+            std::process::id()
+        )))
+        .expect("json report")
+    };
+    let first = run("a");
+    let second = run("b");
+    for suffix in ["a", "b"] {
+        std::fs::remove_file(std::env::temp_dir().join(format!(
+            "pybot-determinism-{}-{suffix}.json",
+            std::process::id()
+        )))
+        .ok();
+    }
+    assert_eq!(first, second, "two processes must emit identical bytes");
+    assert!(first.starts_with(b"{"), "the report is JSON");
+}
+
 fn goldon_text() -> String {
     report().render_text()
 }
@@ -587,7 +653,7 @@ fn the_text_report_has_one_section_per_question_a_reviewer_asks() {
 #[test]
 fn the_json_report_is_valid_json_and_carries_every_figure() {
     let report = report();
-    let encoded = json::to_string(&report.to_json());
+    let encoded = json::to_string(&report.to_json()).expect("finite report");
     let parsed = json::parse_str(&encoded).expect("the report must be valid JSON");
     let object = parsed.as_object().expect("an object");
     let keys: Vec<&str> = object.iter().map(|(key, _)| key.as_str()).collect();
@@ -663,9 +729,9 @@ fn the_json_report_is_valid_json_and_carries_every_figure() {
 
 #[test]
 fn the_json_report_round_trips_through_the_parser_and_the_writer() {
-    let first = json::to_string(&report().to_json());
+    let first = json::to_string(&report().to_json()).expect("finite report");
     let parsed = json::parse_str(&first).expect("parse");
-    let second = json::to_string(&parsed);
+    let second = json::to_string(&parsed).expect("finite report");
     assert_eq!(
         first, second,
         "writer and parser agree on the same document"
@@ -687,7 +753,7 @@ fn the_report_shrinks_to_a_single_turn_without_losing_its_shape() {
     assert_eq!(one.blocks.len(), 1, "one block, not three empty ones");
     let text = one.render_text();
     assert!(text.contains("1 turns") || text.contains("1 turn"));
-    let parsed = json::parse_str(&json::to_string(&one.to_json())).expect("valid");
+    let parsed = json::parse_str(&json::to_string(&one.to_json()).expect("finite")).expect("valid");
     assert_eq!(parsed.get("turns").and_then(Json::as_i64), Some(1));
 }
 

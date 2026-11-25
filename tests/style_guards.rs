@@ -90,6 +90,100 @@ fn production_and_test(source: &str) -> (String, String) {
     }
 }
 
+/// The offset just past the closing brace that ends the `#[cfg(test)]` module at the start of
+/// `tail`, found by counting braces outside string and char literals and comments.
+///
+/// `tail` begins at the `#[cfg(test)]` attribute, so the first `{` after the `mod` keyword
+/// opens the module. Anything after the matching `}` is not part of the test module.
+fn test_module_end(tail: &str) -> Option<usize> {
+    let bytes = tail.as_bytes();
+    let mut position = 0;
+    let mut opened = false;
+    let mut depth = 0usize;
+    while position < bytes.len() {
+        match bytes.get(position).copied() {
+            Some(b'/') if bytes.get(position + 1) == Some(&b'/') => {
+                while position < bytes.len() && bytes.get(position) != Some(&b'\n') {
+                    position += 1;
+                }
+            }
+            Some(b'/') if bytes.get(position + 1) == Some(&b'*') => {
+                position += 2;
+                while position < bytes.len()
+                    && !(bytes.get(position) == Some(&b'*')
+                        && bytes.get(position + 1) == Some(&b'/'))
+                {
+                    position += 1;
+                }
+                position += 2;
+            }
+            Some(b'r') if matches!(bytes.get(position + 1), Some(b'"') | Some(b'#')) => {
+                // A raw string `r"…"` or `r#"…"#` (any number of `#`): find the closing quote
+                // followed by the same number of `#`.
+                let mut hashes = 0;
+                let mut cursor = position + 1;
+                while bytes.get(cursor) == Some(&b'#') {
+                    hashes += 1;
+                    cursor += 1;
+                }
+                cursor += 1; // opening quote
+                while cursor < bytes.len() {
+                    if bytes.get(cursor) == Some(&b'"')
+                        && (0..hashes).all(|offset| bytes.get(cursor + 1 + offset) == Some(&b'#'))
+                    {
+                        position = cursor + 1 + hashes;
+                        break;
+                    }
+                    cursor += 1;
+                }
+                if cursor >= bytes.len() {
+                    position = bytes.len();
+                }
+            }
+            Some(b'"') => {
+                position += 1;
+                while position < bytes.len() {
+                    match bytes.get(position) {
+                        Some(b'\\') => position += 2,
+                        Some(b'"') => {
+                            position += 1;
+                            break;
+                        }
+                        _ => position += 1,
+                    }
+                }
+            }
+            Some(b'\'') => {
+                position += 1;
+                while position < bytes.len() {
+                    match bytes.get(position) {
+                        Some(b'\\') => position += 2,
+                        Some(b'\'') => {
+                            position += 1;
+                            break;
+                        }
+                        _ => position += 1,
+                    }
+                }
+            }
+            Some(b'{') => {
+                opened = true;
+                depth += 1;
+                position += 1;
+            }
+            Some(b'}') => {
+                depth = depth.saturating_sub(1);
+                position += 1;
+                if opened && depth == 0 {
+                    return Some(position);
+                }
+            }
+            _ => position += 1,
+        }
+    }
+    None
+}
+
 // ---------------------------------------------------------------------------- Cargo.toml
 
 #[test]
@@ -258,10 +352,12 @@ fn test_modules_come_last_in_every_file() {
                     "{path}"
                 );
             }
-            // The only items after `mod tests { … }` may be whitespace.
-            let closing = tail.rfind("\n}\n").or_else(|| tail.rfind("\n}"));
+            // The test module must be the last item, and its closing brace must be found by brace
+            // *counting* — `rfind("\n}\n")` would match the closing brace of a function inside the
+            // module (`mod tests { fn a() { … } }`) and call everything after it an item.
+            let closing = test_module_end(tail);
             if let Some(closing) = closing {
-                let rest = tail[closing + 2..].trim();
+                let rest = tail[closing..].trim();
                 assert!(
                     rest.is_empty(),
                     "{path}: items follow the test module: {rest:?}"
@@ -370,29 +466,46 @@ fn the_toolchain_is_pinned_and_matches_the_msrv() {
     }
 }
 
+/// The workflow's lines that could actually execute: YAML comments dropped, and `run:` block
+/// lines that start with `#` dropped (a shell comment inside a script).
+fn executable_workflow_lines(workflow: &str) -> Vec<&str> {
+    workflow
+        .lines()
+        .filter(|line| !line.trim_start().starts_with('#'))
+        .filter(|line| !line.trim_start().starts_with("# "))
+        .collect()
+}
+
 #[test]
 fn the_ci_workflow_runs_every_gate() {
     let workflow = std::fs::read_to_string(
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".github/workflows/ci.yml"),
     )
     .expect("CI workflow");
+    // Only executable text counts. A `# cargo fmt …` inside a `run:` block, or a commented
+    // line anywhere else, must not be able to satisfy a gate.
+    let executable = executable_workflow_lines(&workflow);
+    let joined = executable.join("\n");
     for gate in [
         "cargo fmt --all -- --check",
         "cargo clippy --all-targets",
         "cargo build --all-targets",
         "cargo build --release",
     ] {
-        assert!(workflow.contains(gate), "the workflow must run `{gate}`");
+        assert!(
+            executable.iter().any(|line| line.contains(gate)),
+            "the workflow must run `{gate}`; got:\n{joined}"
+        );
     }
     // Every target (lib, bins, integration tests), in at least one profile. CI may split the
     // debug run per target for readable logs, so look at the `cargo test` lines themselves
     // rather than at one exact command line.
-    let test_lines: Vec<&str> = workflow
-        .lines()
-        .map(str::trim)
-        .filter(|line| {
+    let test_lines: Vec<&str> = executable
+        .iter()
+        .map(|line| line.trim())
+        .filter_map(|line| {
             let line = line.strip_prefix("run:").unwrap_or(line).trim();
-            line.starts_with("cargo test")
+            line.starts_with("cargo test").then_some(line)
         })
         .collect();
     assert!(!test_lines.is_empty(), "the workflow must run `cargo test`");
@@ -401,12 +514,12 @@ fn the_ci_workflow_runs_every_gate() {
         "some `cargo test` invocation must pass `--all-targets`; found {test_lines:?}"
     );
     // Warnings are errors in CI (the local deny list is not enough: `-D warnings` is stricter).
-    assert!(workflow.contains("-D warnings"));
+    assert!(joined.contains("-D warnings"));
     // CI must not need the network, or a dependency could sneak in unnoticed.
-    assert!(workflow.contains("CARGO_NET_OFFLINE"));
+    assert!(joined.contains("CARGO_NET_OFFLINE"));
     // The differential runner is part of the gate, not an optional extra.
     assert!(
-        workflow.contains("differential"),
+        joined.contains("differential"),
         "CI runs the differential harness"
     );
 }

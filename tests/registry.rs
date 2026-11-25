@@ -477,6 +477,74 @@ fn the_registry_metadata_is_a_pure_function_of_the_table() {
 
 // ---------------------------------------------------------------------------- the exporter
 
+/// Priority literals the exporter must read exactly as CPython's `ast.literal_eval` would.
+const PRIORITY_CASES: &[(&str, &str, &str)] = &[
+    ("PRIORITY = 9000", "9000", "int"),
+    ("PRIORITY = 9_000", "9000", "int"),
+    ("PRIORITY = 7_050", "7050", "int"),
+    ("PRIORITY = -999.5", "-999.5", "float"),
+    ("PRIORITY = 1_200.5", "1200.5", "float"),
+    ("PRIORITY = 9500  # the safety band", "9500", "int"),
+];
+
+#[test]
+fn the_export_script_reads_digit_separators_and_comments() {
+    let Some(mut command) = python() else {
+        return; // no interpreter: the AST drift test above still pins the table
+    };
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    // Drive the exporter's own regex against literals the Python tree may not contain today, so
+    // a regression (truncating `9_000` to `9`, or missing the comment form) fails here.
+    let script = r#"
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("exporter", "tools/export_registry.py")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+checked = 0
+for line in sys.stdin.read().splitlines():
+    source, value, kind = line.split("\t")
+    match = module.PRIORITY_RE.search(source)
+    assert match is not None, source
+    raw = match.group(1).replace("_", "")
+    parsed = int(raw) if "." not in raw else float(raw)
+    assert type(parsed).__name__ == kind, (source, parsed)
+    assert repr(parsed) == value, (source, parsed, value)
+    checked += 1
+sys.stderr.write(str(checked))
+"#;
+    let script_path =
+        std::env::temp_dir().join(format!("pybot-priority-check-{}.py", std::process::id()));
+    std::fs::write(&script_path, script).expect("write helper script");
+    let input: String = PRIORITY_CASES
+        .iter()
+        .map(|(source, value, kind)| format!("{source}\t{value}\t{kind}\n"))
+        .collect();
+    let mut child = command
+        .arg(&script_path)
+        .current_dir(&root)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn python");
+    if let Some(mut stdin) = child.stdin.take() {
+        use std::io::Write;
+        let _ = stdin.write_all(input.as_bytes());
+    }
+    let result = child.wait_with_output().expect("python3 runs");
+    std::fs::remove_file(&script_path).ok();
+    assert!(
+        result.status.success(),
+        "exporter priority parsing failed: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&result.stderr).trim(),
+        PRIORITY_CASES.len().to_string(),
+        "every case must be checked"
+    );
+}
+
 /// A working Python interpreter, or `None`.
 ///
 /// GitHub's Linux and macOS runners provide `python3`; the Windows image provides `python`
