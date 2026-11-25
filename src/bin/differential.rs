@@ -58,9 +58,20 @@ fn parse_options(args: &[String]) -> std::result::Result<Options, String> {
         let argument = args.get(index).map(String::as_str).unwrap_or("");
         let mut value = |name: &str| -> std::result::Result<String, String> {
             index += 1;
-            args.get(index)
-                .cloned()
-                .ok_or_else(|| format!("{name} expects a value"))
+            match args.get(index) {
+                // An option-looking token is not an operand: report the missing value instead
+                // of silently consuming the next flag. A path spelled `./--text` and a negative
+                // number (a legal gate) still work, because neither can be a flag here.
+                Some(candidate)
+                    if candidate.starts_with('-')
+                        && candidate != "-"
+                        && candidate.parse::<f64>().is_err() =>
+                {
+                    Err(format!("{name} expects a value"))
+                }
+                Some(candidate) => Ok(candidate.clone()),
+                None => Err(format!("{name} expects a value")),
+            }
         };
         match argument {
             "-h" | "--help" => return Err(String::from("help")),
@@ -68,18 +79,16 @@ fn parse_options(args: &[String]) -> std::result::Result<Options, String> {
             "--json" => options.json = Some(std::path::PathBuf::from(value("--json")?)),
             "--text" => options.text = Some(std::path::PathBuf::from(value("--text")?)),
             "--min-module-percent" => {
-                options.min_module_percent = Some(
-                    value("--min-module-percent")?
-                        .parse()
-                        .map_err(|_| String::from("--min-module-percent expects a number"))?,
-                );
+                options.min_module_percent = Some(threshold(
+                    "--min-module-percent",
+                    &value("--min-module-percent")?,
+                )?);
             }
             "--min-reply-percent" => {
-                options.min_reply_percent = Some(
-                    value("--min-reply-percent")?
-                        .parse()
-                        .map_err(|_| String::from("--min-reply-percent expects a number"))?,
-                );
+                options.min_reply_percent = Some(threshold(
+                    "--min-reply-percent",
+                    &value("--min-reply-percent")?,
+                )?);
             }
             other if other.starts_with('-') => {
                 return Err(format!("unknown option: {other}"));
@@ -92,6 +101,23 @@ fn parse_options(args: &[String]) -> std::result::Result<Options, String> {
         options.directory = directory;
     }
     Ok(options)
+}
+
+/// Parse a `--min-*-percent` gate.
+///
+/// `f64`'s `FromStr` accepts `inf`, `NaN` and `+Infinity`; a gate of `NaN` compares false
+/// against everything and would silently disable itself, so non-finite values are a usage
+/// error. Any *finite* value is accepted, including values outside 0–100 (a gate above 100 is
+/// simply unreachable, and the caller may rely on that to assert "never").
+fn threshold(name: &str, raw: &str) -> std::result::Result<f64, String> {
+    let value: f64 = raw
+        .parse()
+        .map_err(|_| format!("{name} expects a number"))?;
+    if value.is_finite() {
+        Ok(value)
+    } else {
+        Err(format!("{name} expects a finite number"))
+    }
 }
 
 fn usage() -> String {
@@ -127,16 +153,34 @@ fn main_impl(args: &[String]) -> Result<u8> {
         }
     };
 
+    // Writing both reports to one path would mean whichever lands last silently wins.
+    if let (Some(text), Some(json)) = (&options.text, &options.json) {
+        if text == json {
+            eprintln!(
+                "differential: --text and --json point at the same file ({})",
+                text.display()
+            );
+            return Ok(exit::BAD_CORPUS);
+        }
+    }
+
     let report = GoldenReport::build(&golden::compare_corpus(&corpus));
     let text = report.render_text();
     if !options.quiet {
-        print!("{text}");
+        // Fallible, so a closed stdout reaches the `exit::FAILURE` handler instead of
+        // panicking inside `print!`. `--quiet` stays independent of stdout entirely.
+        let mut stdout = std::io::stdout().lock();
+        stdout
+            .write_all(text.as_bytes())
+            .and_then(|()| stdout.flush())
+            .map_err(|error| Error::io("write report", error))?;
     }
     if let Some(path) = &options.text {
         write_file(path, text.as_bytes())?;
     }
     if let Some(path) = &options.json {
-        write_file(path, pybot::json::to_string(&report.to_json()).as_bytes())?;
+        let encoded = pybot::json::to_string(&report.to_json())?;
+        write_file(path, encoded.as_bytes())?;
     }
 
     let mut gate_failed = false;
@@ -171,7 +215,21 @@ fn write_file(path: &std::path::Path, bytes: &[u8]) -> Result<()> {
 }
 
 fn main() -> std::process::ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    // OS strings, so a non-UTF-8 path is a path and not a decode error. Only text operands
+    // (flags, thresholds) are decoded; a non-UTF-8 one is a usage error.
+    let mut args: Vec<String> = Vec::new();
+    for argument in std::env::args_os().skip(1) {
+        match argument.into_string() {
+            Ok(text) => args.push(text),
+            Err(raw) => {
+                eprintln!(
+                    "differential: argument is not valid UTF-8: {}",
+                    raw.to_string_lossy()
+                );
+                return std::process::ExitCode::from(exit::BAD_CORPUS);
+            }
+        }
+    }
     match main_impl(&args) {
         Ok(code) => std::process::ExitCode::from(code),
         Err(error) => {
@@ -304,6 +362,95 @@ mod tests {
         ]))
         .unwrap();
         assert_eq!(code, exit::OK);
+    }
+
+    #[test]
+    fn an_option_token_is_not_eaten_as_a_value() {
+        for flag in [
+            "--json",
+            "--text",
+            "--min-module-percent",
+            "--min-reply-percent",
+        ] {
+            assert_eq!(
+                parse_options(&args(&[flag, "--quiet"])).unwrap_err(),
+                format!("{flag} expects a value"),
+                "{flag}"
+            );
+        }
+        // A path that merely starts with a dash is still a value when spelled unambiguously.
+        let options = parse_options(&args(&["--text", "./--quiet", "--quiet"])).unwrap();
+        assert_eq!(options.text, Some(std::path::PathBuf::from("./--quiet")));
+        assert!(options.quiet);
+    }
+
+    #[test]
+    fn thresholds_reject_non_finite_values() {
+        assert_eq!(
+            parse_options(&args(&["--min-reply-percent", "inf"])).unwrap_err(),
+            "--min-reply-percent expects a finite number"
+        );
+        assert_eq!(
+            parse_options(&args(&["--min-module-percent", "NaN"])).unwrap_err(),
+            "--min-module-percent expects a finite number"
+        );
+        // Finite values outside 0–100 stay valid, and so do ordinary ones.
+        assert_eq!(
+            parse_options(&args(&["--min-reply-percent", "-5"]))
+                .unwrap()
+                .min_reply_percent,
+            Some(-5.0)
+        );
+        assert_eq!(
+            parse_options(&args(&["--min-reply-percent", "101"]))
+                .unwrap()
+                .min_reply_percent,
+            Some(101.0)
+        );
+    }
+
+    #[test]
+    fn one_destination_for_both_reports_is_refused_before_anything_is_written() {
+        let directory =
+            std::env::temp_dir().join(format!("pybot-differential-same-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("both.report");
+        let code = main_impl(&args(&[
+            &format!("{}/tests/golden", env!("CARGO_MANIFEST_DIR")),
+            "--quiet",
+            "--text",
+            path.to_str().unwrap(),
+            "--json",
+            path.to_str().unwrap(),
+        ]))
+        .unwrap();
+        assert_eq!(code, exit::BAD_CORPUS);
+        assert!(
+            !path.exists(),
+            "neither artifact may be written when the destinations collide"
+        );
+        std::fs::remove_dir_all(&directory).ok();
+    }
+
+    #[test]
+    fn distinct_destinations_still_write_both_reports() {
+        let directory =
+            std::env::temp_dir().join(format!("pybot-differential-both-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let text_path = directory.join("report.txt");
+        let json_path = directory.join("report.json");
+        let code = main_impl(&args(&[
+            &format!("{}/tests/golden", env!("CARGO_MANIFEST_DIR")),
+            "--quiet",
+            "--text",
+            text_path.to_str().unwrap(),
+            "--json",
+            json_path.to_str().unwrap(),
+        ]))
+        .unwrap();
+        assert_eq!(code, exit::OK);
+        assert!(text_path.exists() && json_path.exists());
+        std::fs::remove_dir_all(&directory).ok();
     }
 
     #[test]

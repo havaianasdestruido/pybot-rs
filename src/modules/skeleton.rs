@@ -159,10 +159,7 @@ fn classify(lower: &str) -> &'static str {
 /// too long, contain digits or are one of the words that follow `i'm` in normal speech
 /// (`i'm tired`, `i'm sorry`).
 fn extract_name(text: &str) -> Option<String> {
-    let lower = text.to_lowercase();
-    let rest = ["my name is ", "call me ", "i'm ", "i am ", "im "]
-        .iter()
-        .find_map(|marker| lower.find(marker).map(|index| index + marker.len()))?;
+    let rest = find_name_marker(text)?;
     let candidate = text.get(rest..)?;
     let candidate = candidate.split(pyutil::is_space).next().unwrap_or("");
     let candidate = candidate.trim_matches(|character: char| {
@@ -195,6 +192,64 @@ fn extract_name(text: &str) -> Option<String> {
     name.extend(first.to_uppercase());
     name.push_str(characters.as_str());
     Some(name)
+}
+
+/// Byte offset just past the first name marker in `text`, matched case-insensitively and
+/// **only at a word boundary**.
+///
+/// Two hazards the old `lower.find(marker)` had, both fixed here:
+///
+/// * `"tim smith"` contains `"im "` from index 1, so a substring match would remember `tim`
+///   as a name. A marker must start the text or follow a non-letter.
+/// * `to_lowercase` can *change the byte length* (`"İ"` is two bytes, `"i̇"` is three), so an
+///   offset found in the lowered string is not necessarily a valid index into `text`. Matching
+///   walks the original characters and works char by char, so every returned offset is a
+///   `text` char boundary by construction.
+fn find_name_marker(text: &str) -> Option<usize> {
+    const MARKERS: [&str; 5] = ["my name is ", "call me ", "i'm ", "i am ", "im "];
+    let mut boundaries: Vec<usize> = text.char_indices().map(|(offset, _)| offset).collect();
+    boundaries.push(text.len());
+    for start in boundaries {
+        let previous_is_letter = text
+            .get(..start)
+            .and_then(|prefix| prefix.chars().next_back())
+            .is_some_and(char::is_alphabetic);
+        if previous_is_letter {
+            continue;
+        }
+        for marker in MARKERS {
+            if let Some(end) = match_marker_at(text, start, marker) {
+                return Some(end);
+            }
+        }
+    }
+    None
+}
+
+/// `marker` matched against `text[start..]`, case-insensitively, one original character at a
+/// time; returns the offset just past it.
+///
+/// Each character is lowercased **as a whole**: if its expansion overruns the marker, or does
+/// not match it, the match fails — a marker can never be found in the middle of a character's
+/// lowercase expansion.
+fn match_marker_at(text: &str, start: usize, marker: &str) -> Option<usize> {
+    let mut matched = 0;
+    let mut lowered = String::new();
+    for (offset, character) in text.get(start..)?.char_indices() {
+        lowered.clear();
+        lowered.extend(character.to_lowercase());
+        if !marker
+            .get(matched..)
+            .is_some_and(|rest| rest.starts_with(lowered.as_str()))
+        {
+            return None;
+        }
+        matched += lowered.len();
+        if matched == marker.len() {
+            return Some(start + offset + character.len_utf8());
+        }
+    }
+    None
 }
 
 // ---------------------------------------------------------------------------- intent
@@ -554,6 +609,19 @@ mod tests {
         assert_eq!(name_of("i'm just looking around"), None);
         assert_eq!(name_of("i'm 42"), None);
         assert_eq!(name_of("my name is A"), None, "too short");
+        // A marker must start a word: `tim` must not be read as `im Tim`-style "im " + name.
+        assert_eq!(name_of("tim smith is here"), None);
+        assert_eq!(name_of("the swim was long"), None);
+        assert_eq!(name_of("slim shady"), None, "no boundary before the marker");
+        assert_eq!(name_of("hi, i'm sam"), Some(String::from("Sam")));
+        assert_eq!(name_of("call me ana"), Some(String::from("Ana")));
+        // Lowercasing must not shift the offset: `İ` lowercases to two characters (3 bytes),
+        // so an offset measured on the lowered string would slice this name in half.
+        assert_eq!(name_of("İ my name is Sam"), Some(String::from("Sam")));
+        assert_eq!(name_of("İİİ call me Ana"), Some(String::from("Ana")));
+        // A non-ASCII name is preserved exactly.
+        assert_eq!(name_of("my name is José"), Some(String::from("José")));
+        assert_eq!(name_of("i'm Zoë"), Some(String::from("Zoë")));
         assert_eq!(name_of("my name is"), None);
         assert_eq!(name_of("hello"), None);
     }
