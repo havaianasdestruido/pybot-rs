@@ -93,10 +93,10 @@ A fase mais arriscada de “só `std`”. Tudo o que o Python dava de graça pre
 - [ ] Edit distance / similaridade (substituto de `difflib` se usado), com resultados idênticos ao Python nos casos usados.
 
 **2.3 Unicode**
-- [ ] O `std` não normaliza (NFD/NFKD). Mapear o que o PyBot realmente usa (provavelmente remover acentos latinos, casefold) e gerar tabelas mínimas a partir de `unicodedata` via script de dev.
+- [x] NFKD, case-fold, marcas com classe combinante não-zero, classes `Nd`/alfanuméricas e transliterações latinas observadas em PyBot; tabelas Unicode 14.0.0 geradas por `tools/recon/gen_unicode_tables.py`.
 
 **2.4 Aleatoriedade**
-- [ ] O `std` não tem RNG utilizável. Se o bot usa `random`, implementar **MT19937 + `random.seed`/`choice`/`shuffle`/`random()` idênticos ao CPython**, para que a mesma seed gere a mesma saída nos testes. Em produção, a seed vem de `SystemTime`/`RandomState`.
+- [x] MT19937 e chamadas observadas (`seed`, `random`, `getrandbits`, `choice`, `randrange`, `shuffle`, `sample`, snapshot/restore), testadas contra 260 seeds CPython; seed global usa `SystemTime` + PID (não criptográfica). API em `src/rng.rs`.
 
 **Saída:** engine de regex com 100% de acordo com `re` no corpus de padrões; utilitários com testes unitários portados; RNG idêntico ao CPython para as chamadas usadas.
 
