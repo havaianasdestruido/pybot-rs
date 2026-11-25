@@ -24,6 +24,7 @@ use std::ffi::OsString;
 use std::io::{BufRead, IsTerminal, Write};
 
 use crate::error::{Error, Result};
+use crate::limits;
 use crate::pyutil;
 use crate::runtime::Runtime;
 use crate::session::Session;
@@ -107,6 +108,19 @@ pub enum Action {
     Usage(String),
 }
 
+/// Whether argparse would accept `candidate` as the operand of `-p`/`--prompt`.
+///
+/// argparse refuses an option-looking token as an operand only when it *could be* an option:
+/// a single `-` is a value, and so is a negative number (the parser has no negative-number
+/// options, so `-5` is "not an option"). `./--quiet` is a path and therefore a value. Anything
+/// else starting with `-` is rejected, and the caller reports "expected one argument".
+fn is_prompt_operand(candidate: &str) -> bool {
+    if candidate == "-" || !candidate.starts_with('-') {
+        return true;
+    }
+    candidate.parse::<f64>().is_ok()
+}
+
 /// Parse `argv` (without the program name) exactly like `pybot.py`'s argparse.
 ///
 /// Supported shapes (argparse accepts them all, and so must we):
@@ -165,6 +179,12 @@ where
                         "error: argument {argument}: expected one argument"
                     ));
                 };
+                if !is_prompt_operand(value) {
+                    // argparse never consumes another option as a value.
+                    return Action::Usage(format!(
+                        "error: argument {argument}: expected one argument"
+                    ));
+                }
                 options.prompt = Some(value.clone());
                 index += 1;
             }
@@ -175,6 +195,11 @@ where
                         "error: argument -s/--seed: expected one argument",
                     ));
                 };
+                if value.starts_with('-') && value.parse::<i64>().is_err() && value != "-" {
+                    return Action::Usage(String::from(
+                        "error: argument -s/--seed: expected one argument",
+                    ));
+                }
                 match value.parse::<i64>() {
                     Ok(seed) => options.seed = Some(seed),
                     Err(_) => {
@@ -220,8 +245,10 @@ where
                             let value = if rest.is_empty() {
                                 index += 1;
                                 match args.get(index) {
-                                    Some(value) => value.clone(),
-                                    None => {
+                                    Some(value) if character != 'p' || is_prompt_operand(value) => {
+                                        value.clone()
+                                    }
+                                    _ => {
                                         return Action::Usage(format!(
                                             "error: argument -{character}: expected one argument"
                                         ))
@@ -383,6 +410,58 @@ fn run_bot(options: &Options, streams: &mut Streams<'_>) -> Result<u8> {
     Ok(exit::OK)
 }
 
+/// Read one line from `input`, keeping at most [`limits::MAX_INPUT_BYTES`] bytes.
+///
+/// Python's CLI reads a line and the runtime truncates it later; an adversarial pipe can send
+/// a line far larger than the budget, and `read_until` would buffer all of it first. This read
+/// keeps the first bytes up to the budget (plus the newline) and then **discards the rest of
+/// the line** — through the newline or EOF — so memory stays bounded and the next line is read
+/// normally.
+///
+/// `line` ends with `\n` when the input had one, exactly like `read_until(b'\n', ..)`, so
+/// callers can keep using [`pyutil::chomp_line`].
+fn read_line_bounded(input: &mut dyn BufRead, line: &mut Vec<u8>) -> std::io::Result<usize> {
+    line.clear();
+    // The budget for the text, plus one byte reserved for the newline when one arrives; a
+    // truncated line therefore still ends in `\n` and `chomp_line` still trims it.
+    let budget = limits::MAX_INPUT_BYTES.saturating_add(1);
+    let mut kept = 0usize;
+    let mut total = 0usize;
+    loop {
+        let available = match input.fill_buf() {
+            Ok(buffer) => buffer,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error),
+        };
+        if available.is_empty() {
+            break;
+        }
+        let take = available.iter().position(|byte| *byte == b'\n');
+        let end = take.map_or(available.len(), |position| position + 1);
+        if kept < budget {
+            // Reserve the last slot for the newline that ends this line (if any), so the kept
+            // prefix never swallows it.
+            let room = if take.is_some() {
+                budget - kept - 1
+            } else {
+                budget - kept
+            };
+            let chunk = available.get(..room.min(end)).unwrap_or(available);
+            line.extend_from_slice(chunk);
+            kept += chunk.len();
+        }
+        total += end;
+        input.consume(end);
+        if take.is_some() {
+            if kept < budget && kept == budget - 1 {
+                line.push(b'\n');
+            }
+            break;
+        }
+    }
+    Ok(total)
+}
+
 /// `-p` without `-i`: one reply, then exit.
 fn one_shot(
     runtime: &Runtime,
@@ -412,14 +491,17 @@ fn pipe(
     streams: &mut Streams<'_>,
     session: &mut Session,
 ) -> Result<()> {
+    let mut line = Vec::new();
     loop {
-        let mut line = Vec::new();
-        match streams.stdin.read_until(b'\n', &mut line) {
+        match read_line_bounded(streams.stdin, &mut line) {
             Ok(0) => break,
             Ok(_) => {}
             Err(error) => return Err(Error::io("read input", error)),
         }
         let turn = Turn::from_bytes(&line);
+        if turn.is_lossy() {
+            report_lossy(options, streams)?;
+        }
         let text = pyutil::chomp_line(turn.text());
         let answer = runtime.answer(text, session);
         writeln!(streams.stdout, "{}", answer.reply.as_str())
@@ -458,8 +540,7 @@ fn chat(
                 .stdout
                 .flush()
                 .map_err(|error| Error::io("flush prompt", error))?;
-            line.clear();
-            match streams.stdin.read_until(b'\n', &mut line) {
+            match read_line_bounded(streams.stdin, &mut line) {
                 Ok(0) => {
                     writeln!(streams.stdout).map_err(|error| Error::io("write newline", error))?;
                     break;
@@ -468,6 +549,9 @@ fn chat(
                 Err(error) => return Err(Error::io("read input", error)),
             }
             let turn = Turn::from_bytes(&line);
+            if turn.is_lossy() {
+                report_lossy(options, streams)?;
+            }
             pyutil::chomp_line(turn.text()).to_string()
         };
 
@@ -512,6 +596,22 @@ fn chat(
 
 /// `[module: <name> | <ms> ms]` — `pybot.py::details`. The port has no timing here; the
 /// differential and benchmark binaries report real timings.
+/// Tell the user (on stderr, only with `-v`) that a line was not valid UTF-8.
+///
+/// The Python CLI crashes on such input. The port stays usable — the invalid bytes become
+/// U+FFFD in the prompt and the turn proceeds — but the substitution is not silent, so a
+/// corpus mismatch traced to it is explainable.
+fn report_lossy(options: &Options, streams: &mut Streams<'_>) -> Result<()> {
+    if options.verbose {
+        writeln!(
+            streams.stderr,
+            "[input: invalid UTF-8 replaced with U+FFFD]"
+        )
+        .map_err(|error| Error::io("write details", error))?;
+    }
+    Ok(())
+}
+
 fn details(module: Option<&str>) -> String {
     format!("[module: {} | 0 ms]", module.unwrap_or("none"))
 }
@@ -677,13 +777,28 @@ mod tests {
                 ..Options::default()
             })
         );
+        // argparse refuses an option token as the operand of `-p` and reports the missing
+        // argument instead of consuming `-i` as the prompt (verified against CPython 3.11).
+        match parse_args(&["-p", "-i"]) {
+            Action::Usage(message) => {
+                assert_eq!(message, "error: argument -p: expected one argument");
+            }
+            other => panic!("expected a usage error, got {other:?}"),
+        }
+        // A negative number and a bare `-` are not options, so they stay valid prompts.
         assert_eq!(
-            parse_args(&["-p", "-i"]),
+            parse_args(&["-p", "-5"]),
             Action::Run(Options {
-                prompt: Some(String::from("-i")),
+                prompt: Some(String::from("-5")),
                 ..Options::default()
-            }),
-            "the value is taken verbatim, like argparse"
+            })
+        );
+        assert_eq!(
+            parse_args(&["-p", "-"]),
+            Action::Run(Options {
+                prompt: Some(String::from("-")),
+                ..Options::default()
+            })
         );
         assert_eq!(
             parse_args(&["-p", ""]),
@@ -1146,6 +1261,62 @@ mod tests {
         assert_eq!(normalise_reply(&Reply::new("")).as_str(), "Hello!");
         assert_eq!(normalise_reply(&Reply::new("   ")).as_str(), "Hello!");
         assert_eq!(normalise_reply(&Reply::new("Hello!")).as_str(), "Hello!");
+    }
+
+    #[test]
+    fn read_line_bounded_keeps_the_budget_and_discards_the_rest() {
+        let budget = limits::MAX_INPUT_BYTES;
+        // A line far over budget, then a normal line: the first is cut at the budget (plus the
+        // newline) and the second is read normally, so a long line never eats its successor.
+        let mut input =
+            std::io::Cursor::new([vec![b'a'; budget * 3], b"\nsecond\n".to_vec()].concat());
+        let mut line = Vec::new();
+        let first = read_line_bounded(&mut input, &mut line).unwrap();
+        assert_eq!(first, budget * 3 + 1, "the whole line was consumed");
+        assert_eq!(
+            line.len(),
+            budget + 1,
+            "the budget of text plus the kept newline"
+        );
+        assert_eq!(line.last(), Some(&b'\n'));
+
+        let second = read_line_bounded(&mut input, &mut line).unwrap();
+        assert_eq!(second, 7);
+        assert_eq!(line, b"second\n");
+
+        let third = read_line_bounded(&mut input, &mut line).unwrap();
+        assert_eq!(third, 0, "EOF");
+        assert!(line.is_empty());
+    }
+
+    #[test]
+    fn read_line_bounded_handles_no_trailing_newline_and_crlf() {
+        let mut input = std::io::Cursor::new(b"no newline".to_vec());
+        let mut line = Vec::new();
+        assert_eq!(read_line_bounded(&mut input, &mut line).unwrap(), 10);
+        assert_eq!(line, b"no newline");
+        assert_eq!(read_line_bounded(&mut input, &mut line).unwrap(), 0);
+        assert!(line.is_empty(), "the buffer is cleared on every call");
+
+        let mut input = std::io::Cursor::new(b"crlf\r\nnext\n".to_vec());
+        assert_eq!(read_line_bounded(&mut input, &mut line).unwrap(), 6);
+        assert_eq!(line, b"crlf\r\n");
+        assert_eq!(pyutil::chomp_line(str::from_utf8(&line).unwrap()), "crlf");
+    }
+
+    #[test]
+    fn a_prompt_operand_may_not_be_another_option() {
+        // argparse: `-p -i` and `-p --verbose` are missing operands, not an `-i` prompt.
+        assert!(!is_prompt_operand("-i"));
+        assert!(!is_prompt_operand("--verbose"));
+        assert!(!is_prompt_operand("--"));
+        // …but a number, a lone dash and a relative path are values.
+        assert!(is_prompt_operand("-5"));
+        assert!(is_prompt_operand("-1.5e3"));
+        assert!(is_prompt_operand("-"));
+        assert!(is_prompt_operand("./--quiet"));
+        assert!(is_prompt_operand("hello"));
+        assert!(is_prompt_operand(""));
     }
 
     #[test]
