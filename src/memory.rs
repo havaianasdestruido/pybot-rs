@@ -409,12 +409,34 @@ impl Memory {
         }
     }
 
+    /// A private deep copy with a runtime-owned *mirror* key installed.
+    ///
+    /// The mirror is not an ordinary key: it is reserved on top of [`limits::MAX_MEMORY_KEYS`]
+    /// so the runtime can always hand modules the `turns` view, even when a conversation has
+    /// filled the ordinary budget (which a long session does: the cap is 512 keys and every
+    /// module may add one). Installing it costs nothing — it never evicts a key nor counts as
+    /// a dropped write — and [`Snapshot::map_mut`] lets the runtime strip it again before a
+    /// winning snapshot is installed in the session, so it can never leak into the memory.
+    #[must_use]
+    pub fn snapshot_with_mirror(&self, key: &str, value: Value) -> Snapshot {
+        let mut map = self.map.clone();
+        // The runtime owns this name: drop any stored value under it, so `get`, `keys` and the
+        // handler's view agree that there is exactly one `turns` entry.
+        map.remove(key);
+        Snapshot {
+            map,
+            dropped_writes: self.dropped_writes,
+            mirror: Some((key.to_string(), value)),
+        }
+    }
+
     /// A private deep copy (Python `copy.deepcopy`).
     #[must_use]
     pub fn snapshot(&self) -> Snapshot {
         Snapshot {
             map: self.map.clone(),
             dropped_writes: self.dropped_writes,
+            mirror: None,
         }
     }
 
@@ -464,17 +486,33 @@ impl Memory {
 pub struct Snapshot {
     map: Map,
     dropped_writes: usize,
+    /// A reserved runtime-owned key that sits outside the ordinary budget (see
+    /// [`Memory::snapshot_with_mirror`]).
+    mirror: Option<(String, Value)>,
 }
 
 impl Snapshot {
-    /// Borrow a value.
+    /// Borrow a value, including the runtime-owned mirror key (which a stored key of the same
+    /// name cannot shadow, because the runtime owns that name).
     #[must_use]
     pub fn get(&self, key: &str) -> Option<&Value> {
-        self.map.get(key)
+        match &self.mirror {
+            Some((mirror_key, value)) if mirror_key == key => Some(value),
+            _ => self.map.get(key),
+        }
     }
 
     /// Set a value; returns `false` (and drops the write) when the budget is exceeded.
+    ///
+    /// Writing the mirror key overwrites the mirror itself — not a stored key of the same
+    /// name — so a handler that scribbles over `turns` sees its own value back and the log is
+    /// still untouched.
     pub fn set(&mut self, key: impl Into<String>, value: Value) -> bool {
+        let key = key.into();
+        if self.mirror.as_ref().is_some_and(|(name, _)| *name == key) {
+            self.mirror = Some((key, value));
+            return true;
+        }
         if self.map.set(key, value).is_ok() {
             true
         } else {
@@ -483,15 +521,22 @@ impl Snapshot {
         }
     }
 
-    /// Keys in insertion order.
+    /// Keys in insertion order, with the mirror key last.
     pub fn keys(&self) -> impl Iterator<Item = &str> + '_ {
-        self.map.keys()
+        self.map
+            .keys()
+            .chain(self.mirror.as_ref().map(|(key, _)| key.as_str()))
     }
 
-    /// Sorted keys.
+    /// Sorted keys, mirror included.
     #[must_use]
     pub fn sorted_keys(&self) -> Vec<&str> {
-        self.map.sorted_keys()
+        let mut keys = self.map.sorted_keys();
+        if let Some((key, _)) = &self.mirror {
+            keys.push(key);
+            keys.sort_unstable();
+        }
+        keys
     }
 
     /// The underlying map (read-only view for handlers that need structure).
@@ -500,14 +545,24 @@ impl Snapshot {
         &self.map
     }
 
-    /// Remove a key from the snapshot, returning its value.
+    /// Remove a key from the snapshot, returning its value (the mirror included: removing it is
+    /// how the runtime makes a snapshot safe to install).
     pub fn remove(&mut self, key: &str) -> Option<Value> {
+        if self.mirror.as_ref().is_some_and(|(name, _)| name == key) {
+            return self.mirror.take().map(|(_, value)| value);
+        }
         self.map.remove(key)
     }
 
     /// The map, mutably (the runtime uses it to strip the read-only `turns` mirror).
     pub fn map_mut(&mut self) -> &mut Map {
         &mut self.map
+    }
+
+    /// Drop the runtime-owned mirror, if any. A snapshot is installed only after this, so the
+    /// mirror can never enter the conversation's memory.
+    pub fn clear_mirror(&mut self) {
+        self.mirror = None;
     }
 
     /// How many writes this snapshot dropped.

@@ -147,10 +147,13 @@ impl Session {
             "turns".to_string(),
             Value::List(self.turns.iter().map(LoggedTurn::to_value).collect()),
         )];
+        // The log is authoritative: a stored `turns` value (a restorer, a test, a future
+        // importer) must never shadow or duplicate it, so the ordinary fields skip that key.
         fields.extend(
             self.memory
                 .map()
                 .iter()
+                .filter(|(key, _)| *key != "turns")
                 .map(|(key, value)| (key.to_string(), value.clone())),
         );
         Value::Object(fields)
@@ -188,9 +191,8 @@ impl Session {
     /// (the mirror is overwritten after the turn).
     #[must_use]
     pub fn snapshot(&self) -> Snapshot {
-        let mut snapshot = self.memory.snapshot();
-        snapshot.set("turns", self.turns_value());
-        snapshot
+        self.memory
+            .snapshot_with_mirror("turns", self.turns_value())
     }
 
     /// The log as a [`Value::List`].
@@ -203,7 +205,10 @@ impl Session {
     /// ignored: the runtime owns the log).
     pub fn apply(&mut self, snapshot: &Snapshot) {
         let mut cleaned = snapshot.clone();
-        cleaned.remove("turns");
+        // Neither the runtime's mirror nor a module-written `turns` key may enter the memory:
+        // the turn log is `Session::turns`, and only `log_turn` appends to it.
+        cleaned.clear_mirror();
+        cleaned.map_mut().remove("turns");
         self.memory.restore(&cleaned);
     }
 
@@ -369,6 +374,86 @@ mod tests {
             !session.memory_map().contains_key("turns"),
             "mirror never lands in memory"
         );
+    }
+
+    #[test]
+    fn a_stored_turns_key_cannot_alter_the_log_or_its_digest() {
+        // A restorer, a future importer or a buggy module may leave a `turns` value in the
+        // ordinary memory. `Session::turns` stays authoritative: the value never shadows the
+        // log in `memory_value`, `memory_keys` or the digest.
+        let mut session = Session::new();
+        session.record(&Turn::new("hi"), &Reply::new("Hello!"), None);
+        session.memory.set("turns", Value::string("not the log"));
+        let with_stray = session.memory_value();
+        let digest_with_stray = session.memory_digest();
+        let keys_with_stray: Vec<String> = session
+            .memory_keys()
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+
+        session.memory.map_mut().remove("turns");
+        assert_eq!(session.memory_value(), with_stray, "the stray is invisible");
+        assert_eq!(session.memory_digest(), digest_with_stray);
+        assert_eq!(
+            session.memory_keys(),
+            keys_with_stray
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            session
+                .memory_value()
+                .get("turns")
+                .and_then(Value::as_list)
+                .map(<[Value]>::len),
+            Some(1),
+            "the log, not the stray string, is under `turns`"
+        );
+        assert_eq!(
+            session.memory_keys(),
+            vec!["turns"],
+            "no duplicated `turns` key"
+        );
+    }
+
+    #[test]
+    fn the_turns_mirror_survives_a_full_memory_budget() {
+        // A long conversation can fill all 512 ordinary slots. The runtime owns one slot on
+        // top of the budget for the `turns` view, so handlers still see the log, no ordinary
+        // key is evicted, and nothing is counted as a dropped write.
+        let mut session = Session::new();
+        session.record(&Turn::new("hi"), &Reply::new("Hello!"), None);
+        for index in 0..limits::MAX_MEMORY_KEYS {
+            session.memory.set(format!("key_{index}"), Value::Int(1));
+        }
+        assert_eq!(session.memory_key_count(), limits::MAX_MEMORY_KEYS);
+        let before = session.memory.dropped_writes();
+
+        let snapshot = session.snapshot();
+        assert_eq!(snapshot.sorted_keys().len(), limits::MAX_MEMORY_KEYS + 1);
+        assert!(
+            snapshot.get("turns").and_then(Value::as_list).is_some(),
+            "the mirror is present at the cap"
+        );
+        assert_eq!(
+            snapshot.map().keys().count(),
+            limits::MAX_MEMORY_KEYS,
+            "the mirror is not an ordinary key"
+        );
+        assert_eq!(
+            session.memory.dropped_writes(),
+            before,
+            "installing the mirror is free"
+        );
+
+        // Installing the snapshot back cannot lose an ordinary key nor add the mirror.
+        let winner = snapshot.clone();
+        session.apply(&winner);
+        assert_eq!(session.memory_key_count(), limits::MAX_MEMORY_KEYS);
+        assert!(!session.memory_map().contains_key("turns"));
+        assert_eq!(session.memory.dropped_writes(), before);
     }
 
     #[test]
