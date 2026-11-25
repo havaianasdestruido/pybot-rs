@@ -68,10 +68,10 @@ Entender o que existe antes de escrever uma linha de Rust.
 
 ## Fase 1 — Fundação e harness
 
-- [ ] Criar o crate, lints, CI (`cargo build`, `clippy`, `test`, formatação), MSRV fixa.
-- [ ] Definir tipos centrais: `Turn`, `Session`, `Reply`, `ModuleId`, `Error` (sem `Box<dyn Error>` solto).
-- [ ] **Runner diferencial**: executa o corpus dourado no Rust e compara com o Python, relatório por diretório/módulo (% idêntico, diffs agrupados).
-- [ ] Esqueleto do `main.rs`: `-p "pergunta"`, REPL com `/reset` e `/exit` (std: `std::io::stdin().lines()`).
+- [x] Criar o crate, lints, CI (`cargo build`, `clippy`, `test`, formatação), MSRV fixa.
+- [x] Definir tipos centrais: `Turn`, `Session`, `Reply`, `ModuleId`, `Error` (sem `Box<dyn Error>` solto).
+- [x] **Runner diferencial**: executa o corpus dourado no Rust e compara com o Python, relatório por diretório/módulo (% idêntico, diffs agrupados).
+- [x] Esqueleto do `main.rs`: `-p "pergunta"`, REPL com `/reset` e `/exit` (std: `std::io::stdin().lines()`).
 
 **Saída:** CI verde com o runner funcionando (0% de equivalência é aceitável; o harness é o entregável).
 

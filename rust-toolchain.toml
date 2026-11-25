@@ -1,0 +1,6 @@
+# MSRV is fixed (GOAL.md, Fase 1). Everyone — developers and CI — builds with this exact
+# toolchain, so lints and formatting are stable. Bump deliberately, in its own commit.
+[toolchain]
+channel = "1.97.0"
+components = ["clippy", "rustfmt"]
+profile = "minimal"

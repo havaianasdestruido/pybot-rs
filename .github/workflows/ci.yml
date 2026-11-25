@@ -1,0 +1,179 @@
+name: CI
+
+# Fase 1 gate (GOAL.md): cargo build, clippy, test and formatting must be green.
+# The toolchain is pinned by rust-toolchain.toml (MSRV 1.97.0), so CI and developers
+# compile with the exact same compiler and lints.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  # Keep CI offline-safe: the crate has no dependencies, so it never needs the network.
+  CARGO_NET_OFFLINE: "true"
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ------------------------------------------------------------------ formatting
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show toolchain
+        run: rustc --version && cargo --version
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+  # ------------------------------------------------------------------ build + tests
+  test:
+    name: build, clippy, test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show toolchain
+        run: rustc --version && cargo --version
+      - name: cargo build (debug)
+        run: cargo build --all-targets --locked
+      - name: cargo build (release)
+        run: cargo build --release --locked
+      - name: cargo clippy (deny warnings)
+        shell: bash
+        run: cargo clippy --all-targets --all-features --locked -- -D warnings
+      - name: cargo test
+        shell: bash
+        run: |
+          set -o pipefail
+          # One suite at a time, each summarised in the log, so a matrix failure names the
+          # binary (unit tests, golden, registry, style guards, differential) on the first look.
+          {
+            echo "::group::lib"
+            cargo test --locked --lib 2>&1
+            echo "::endgroup::"
+            echo "::group::bin differential"
+            cargo test --locked --bin differential 2>&1
+            echo "::endgroup::"
+            echo "::group::bin pybot"
+            cargo test --locked --bin pybot 2>&1
+            echo "::endgroup::"
+            echo "::group::test golden"
+            cargo test --locked --test golden 2>&1
+            echo "::endgroup::"
+            echo "::group::test registry"
+            cargo test --locked --test registry 2>&1
+            echo "::endgroup::"
+            echo "::group::test style_guards"
+            cargo test --locked --test style_guards 2>&1
+            echo "::endgroup::"
+          } 2>&1 | tee test-output.txt
+          exit "${PIPESTATUS[0]}"
+      - name: cargo test (release, same tests, optimised)
+        if: success()
+        shell: bash
+        run: cargo test --release --all-targets --locked
+      - name: Print failure summary
+        if: failure()
+        shell: bash
+        # `::error::` lines become check-run annotations, which the API serves even when the
+        # runner's blob-storage log is unreachable. bash, not python3: on Windows `python3` is
+        # the Store stub. Capped per line so GitHub accepts the annotation.
+        run: |
+          [ -f test-output.txt ] || exit 0
+          grep -aE '^(error(\[|:)|failures:|thread .* panicked|---- .* stdout ----|test .* FAILED|assertion)' test-output.txt \
+            | head -40 \
+            | while IFS= read -r line; do
+                cleaned=${line//'%'/'%25'}
+                cleaned=${cleaned//$'\r'/'%0D'}
+                echo "::error::${cleaned:0:900}"
+              done
+          exit 0
+      - name: Upload failure output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output-${{ matrix.os }}
+          path: test-output.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # ------------------------------------------------------------------ std-only guard
+  std-only:
+    name: no dependencies, no unsafe
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cargo.toml declares zero dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import tomllib
+          with open("Cargo.toml", "rb") as handle:
+              manifest = tomllib.load(handle)
+          for section in ("dependencies", "dev-dependencies", "build-dependencies"):
+              declared = manifest.get(section) or {}
+              assert declared == {}, f"{section} must stay empty, found: {declared}"
+          print("Cargo.toml: zero dependencies in every section")
+          PY
+      - name: There is no Cargo.lock with registry crates
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f Cargo.lock ]; then
+            python3 - <<'PY'
+          import re
+          text = open("Cargo.lock", encoding="utf-8").read()
+          packages = re.findall(r'^name = "([^"]+)"', text, flags=re.M)
+          external = [p for p in packages if p != "pybot"]
+          assert not external, f"unexpected registry crates: {external}"
+          print("Cargo.lock: only the pybot package")
+          PY
+          fi
+      - name: unsafe is forbidden outside the Fase 11 ffi module
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '#!\[forbid(unsafe_code)\]' src/lib.rs
+          if grep -rn --include='*.rs' -E '\bunsafe\b[[:space:]]*\{' src/; then
+            echo "::error::unsafe blocks found in src/ (only src/ffi.rs may have them, Fase 11)"
+            exit 1
+          fi
+          echo "src/: no unsafe blocks"
+
+  # ------------------------------------------------------------------ golden harness
+  golden:
+    name: differential harness (${{ matrix.profile }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        profile: [debug, release]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show toolchain
+        run: rustc --version && cargo --version
+      - name: Golden corpus runs (harness smoke, both profiles)
+        if: matrix.profile == 'debug'
+        run: cargo test --locked --test golden -- --nocapture
+      - name: Golden corpus runs (optimised)
+        if: matrix.profile == 'release'
+        run: cargo test --release --locked --test golden -- --nocapture
+      - name: Registry matches the Python reference
+        run: cargo test --locked --test registry
+      - name: Project rules are enforced as tests
+        run: cargo test --locked --test style_guards
+      - name: Differential report is writable end to end
+        run: cargo run --release --locked --bin differential -- tests/golden
