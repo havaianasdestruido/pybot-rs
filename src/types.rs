@@ -1,9 +1,9 @@
-//! Central types shared by the whole crate: [`Turn`], [`Session`], [`Reply`], [`ModuleId`],
-//! [`ModuleName`], [`Priority`], [`SessionId`].
+//! Central types shared by the whole crate: [`Turn`], [`crate::session::Session`], [`Reply`],
+//! [`ModuleId`], [`ModuleName`], [`Priority`], [`SessionId`].
 //!
 //! Two design decisions come straight from GOAL.md:
 //!
-//! * **`ModuleId` is a small integer assigned statically** ([`modules::registry`]) so no
+//! * **`ModuleId` is a small integer assigned statically** ([`crate::modules::registry`]) so no
 //!   `&'static str` comparisons and no `HashMap<&str, _>` ever decide output ordering; the id
 //!   order is the canonical `(-priority, name)` order of `bot/runtime.py`.
 //! * **`Priority` mirrors Python's heterogeneous `PRIORITY` numbers**: modules declare
@@ -107,7 +107,7 @@ impl PartialEq<&str> for ModuleName<'_> {
 /// numerically and `-999.5 < -999 < -998`. Keeping the variant (rather than normalising
 /// everything to `f64`) preserves signed zero and lets the differential report normalise
 /// priorities exactly as Python's `repr` would (`300` vs `300.0`).
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug)]
 pub enum Priority {
     /// A Python `int` (only those that fit `i64`; larger is capped, see [`Self::from_i128`]).
     Int(i64),
@@ -178,18 +178,97 @@ impl fmt::Display for Priority {
     }
 }
 
+impl Priority {
+    /// Exact numeric comparison of an `i64` with an `f64`, without rounding the integer to
+    /// `f64` (which loses information beyond `2^53`), and with `-0.0 == 0`.
+    fn compare_int_float(integer: i64, float: f64) -> std::cmp::Ordering {
+        if float.is_infinite() {
+            return if float.is_sign_positive() {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Greater
+            };
+        }
+        // `2^63` is exactly representable, so this comparison is exact.
+        if float >= 9_223_372_036_854_775_808.0 {
+            return std::cmp::Ordering::Less;
+        }
+        if float < -9_223_372_036_854_775_808.0 {
+            return std::cmp::Ordering::Greater;
+        }
+        // In range, `trunc` is exact, and so is `integer as f64` when it equals the truncation.
+        let truncated = float.trunc();
+        match integer.cmp(&(truncated as i64)) {
+            std::cmp::Ordering::Equal => {
+                if float.fract() > 0.0 {
+                    std::cmp::Ordering::Less
+                } else if float.fract() < 0.0 {
+                    std::cmp::Ordering::Greater
+                } else {
+                    std::cmp::Ordering::Equal
+                }
+            }
+            other => other,
+        }
+    }
+
+    /// The comparison `partial_cmp` implements, total: `None` is never returned, so equal
+    /// values compare `Equal` and signed zero is *not* distinguished numerically (`-0.0` and
+    /// `0.0` are the same number in Python, and `-1000.0 == -1000` there too).
+    fn compare(&self, other: &Self) -> std::cmp::Ordering {
+        match (self, other) {
+            (Self::Int(left), Self::Int(right)) => left.cmp(right),
+            (Self::Float(left), Self::Float(right)) => {
+                // IEEE order, so `-0.0 == 0.0` like Python. A directly constructed NaN (never
+                // produced by `from_f64`) sorts after every number, so the order stays total.
+                match (left.is_nan(), right.is_nan()) {
+                    (true, true) => std::cmp::Ordering::Equal,
+                    (true, false) => std::cmp::Ordering::Greater,
+                    (false, true) => std::cmp::Ordering::Less,
+                    (false, false) => left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal),
+                }
+            }
+            (Self::Int(left), Self::Float(right)) => {
+                if right.is_nan() {
+                    std::cmp::Ordering::Less
+                } else {
+                    Self::compare_int_float(*left, *right)
+                }
+            }
+            (Self::Float(left), Self::Int(right)) => {
+                if left.is_nan() {
+                    std::cmp::Ordering::Greater
+                } else {
+                    Self::compare_int_float(*right, *left).reverse()
+                }
+            }
+        }
+    }
+}
+
 impl PartialOrd for Priority {
     /// Numeric order across the int and float variants, like Python's `int`/`float`
-    /// comparison. `PartialOrd` (not `Ord`) because two *different* values may compare equal:
-    /// `Int(300)` and `Float(300.0)` are the same number, just as in Python — and `-0.0`
-    /// vs `0.0` differs only through `total_cmp`, so ties are broken deterministically.
+    /// comparison: `-999.5 < -999 < -998`, and `300 == 300.0` compares `Equal`.
+    ///
+    /// Two details matter more than they look:
+    ///
+    /// * int/float pairs are compared **without rounding the integer to `f64`**, so
+    ///   `9_007_199_254_740_993` stays greater than `9_007_199_254_740_992.0` (someone
+    ///   converting both to `f64` would call them equal);
+    /// * `-0.0` and `0.0` compare `Equal`, because they are one number in Python — and
+    ///   [`PartialEq`] below is defined through this same comparison, so the two can never
+    ///   disagree.
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(match (self, other) {
-            (Self::Int(left), Self::Int(right)) => left.cmp(right),
-            (Self::Float(left), Self::Float(right)) => left.total_cmp(right),
-            (Self::Int(left), Self::Float(right)) => (*left as f64).total_cmp(right),
-            (Self::Float(left), Self::Int(right)) => left.total_cmp(&(*right as f64)),
-        })
+        Some(self.compare(other))
+    }
+}
+
+impl PartialEq for Priority {
+    /// Numeric equality, so it always agrees with [`Self::partial_cmp`]: `Int(300) ==
+    /// Float(300.0)`, and `Float(-0.0) == Float(0.0)` (Python's `-0.0 == 0.0`). The variant
+    /// and the signed zero survive in [`Self::repr`], which is what the report prints.
+    fn eq(&self, other: &Self) -> bool {
+        self.compare(other) == std::cmp::Ordering::Equal
     }
 }
 
@@ -454,10 +533,16 @@ mod tests {
     }
 
     #[test]
-    fn priority_keeps_signed_zero_apart() {
+    fn priority_signed_zero_is_one_number_but_keeps_its_spelling() {
         let negative = Priority::from_f64(-0.0).unwrap();
         let positive = Priority::from_f64(0.0).unwrap();
-        assert!(negative == positive, "they compare equal numerically");
+        // Python: `-0.0 == 0.0`, and the comparison policy therefore treats them as one value,
+        // so `PartialEq` and `partial_cmp` can never disagree. The sign survives in `repr`.
+        assert!(negative == positive, "they are the same number");
+        assert_eq!(
+            negative.partial_cmp(&positive),
+            Some(std::cmp::Ordering::Equal)
+        );
         assert_eq!(negative.repr(), "-0.0");
         assert_eq!(positive.repr(), "0.0");
         assert_ne!(
@@ -525,13 +610,76 @@ mod tests {
             rendered,
             vec!["-1000", "-1000.0", "-999.5", "0.0", "0", "300", "9000"]
         );
-        // Equal numbers across variants are equal, like Python's int/float comparison.
+        // Equal numbers across variants are equal, like Python's int/float comparison, and
+        // `PartialEq` says exactly what `partial_cmp` says.
         assert_eq!(
             Priority::Int(0).partial_cmp(&Priority::Float(0.0)),
             Some(std::cmp::Ordering::Equal)
         );
+        assert_eq!(Priority::Int(0), Priority::Float(0.0));
         assert_eq!(Priority::Int(-1000), Priority::Int(-1000));
-        assert_ne!(Priority::Int(-1000), Priority::Float(-1000.0));
+        assert_eq!(Priority::Int(-1000), Priority::Float(-1000.0));
+        assert_eq!(
+            Priority::Int(-1000).partial_cmp(&Priority::Float(-1000.0)),
+            Some(std::cmp::Ordering::Equal)
+        );
+        assert_ne!(Priority::Int(-1000), Priority::Float(-999.5));
+    }
+
+    #[test]
+    fn priority_int_float_comparison_is_exact_beyond_two_to_the_53() {
+        // `9_007_199_254_740_993` does not fit in `f64` (it rounds to `…992`), so comparing
+        // after converting the integer would call these equal. Python does not.
+        let big = Priority::Int(9_007_199_254_740_993);
+        let float = Priority::Float(9_007_199_254_740_992.0);
+        assert_eq!(big.partial_cmp(&float), Some(std::cmp::Ordering::Greater));
+        assert!(big > float);
+        assert!(float < big);
+        assert_ne!(big, float);
+        // Exactly representable pairs still compare equal, and fractions still order.
+        assert_eq!(
+            Priority::Int(300).partial_cmp(&Priority::Float(300.0)),
+            Some(std::cmp::Ordering::Equal)
+        );
+        assert!(Priority::Int(-1000) < Priority::Float(-999.5));
+        assert!(Priority::Int(i64::MAX) < Priority::Float(f64::INFINITY));
+        assert!(Priority::Int(i64::MIN) > Priority::Float(f64::NEG_INFINITY));
+        assert!(Priority::Float(f64::INFINITY) > Priority::Int(i64::MAX));
+    }
+
+    #[test]
+    fn priority_equality_agrees_with_ordering_for_every_pair() {
+        // A directly constructed NaN is not a legal priority, but the type must still be
+        // total: no panic, and `==` exactly when the comparison is `Equal`.
+        let values = [
+            Priority::Int(-1000),
+            Priority::Int(0),
+            Priority::Int(300),
+            Priority::Int(9_007_199_254_740_993),
+            Priority::Float(-0.0),
+            Priority::Float(0.0),
+            Priority::Float(-999.5),
+            Priority::Float(300.0),
+            Priority::Float(9_007_199_254_740_992.0),
+            Priority::Float(f64::NAN),
+        ];
+        for left in values {
+            for right in values {
+                let compared = left.partial_cmp(&right).expect("never None");
+                assert_eq!(
+                    left == right,
+                    compared == std::cmp::Ordering::Equal,
+                    "{left:?} vs {right:?}"
+                );
+                assert_eq!(
+                    compared,
+                    right.partial_cmp(&left).expect("never None").reverse(),
+                    "{left:?} vs {right:?}"
+                );
+            }
+            // Reflexivity even for the NaN, so a sort can never loop or panic.
+            assert_eq!(left.partial_cmp(&left), Some(std::cmp::Ordering::Equal));
+        }
     }
 
     // ------------------------------------------------------------------ Turn
