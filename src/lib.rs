@@ -63,7 +63,10 @@ pub mod memory;
 pub mod modules;
 pub mod pyutil;
 pub mod runtime;
+pub mod rng;
 pub mod session;
+pub mod util;
+pub mod unicode;
 pub mod types;
 
 pub use error::{Error, Result};
