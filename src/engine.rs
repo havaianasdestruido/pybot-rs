@@ -204,6 +204,9 @@ impl Engine {
     /// list becomes the `"Hello!"` fallback, and the function's return type says so.
     pub fn step(&self, turn: &Turn, session: &mut Session) -> TurnReport {
         let mut faults = Faults::default();
+        // `Session::memory` keeps a *cumulative* counter; the report describes one turn, so
+        // measure the turn itself and let the counter stay cumulative.
+        let dropped_before = session.memory.dropped_writes();
         let turn = Self::bounded_turn(turn, &mut faults);
         let turn = turn.as_ref();
 
@@ -260,7 +263,7 @@ impl Engine {
         faults.memory_dropped_writes = session
             .memory
             .dropped_writes()
-            .saturating_add(after.dropped_writes());
+            .saturating_sub(dropped_before);
 
         session.log_turn(LoggedTurn {
             user: turn.text().to_string(),
@@ -401,6 +404,46 @@ mod tests {
         assert_eq!(panic_message(payload.as_ref()), "panic: owned");
         let payload: Box<dyn std::any::Any + Send> = Box::new(42_u8);
         assert_eq!(panic_message(payload.as_ref()), "panic: non-string payload");
+    }
+
+    #[test]
+    fn dropped_writes_are_reported_per_turn_not_cumulatively() {
+        // The session's counter is cumulative across a conversation. A turn's report must say
+        // what *this* turn dropped, or the harness would report a growing fault count for a
+        // session that only overflowed once. Simulate the overflow by handing the engine a
+        // session already at the key budget.
+        let engine = Engine::new();
+        let mut session = Session::new();
+        for index in 0..limits::MAX_MEMORY_KEYS {
+            session.memory.set(format!("k{index}"), Value::Int(1));
+        }
+        // Fill any room a plain turn would have left: every write now overflows.
+        let first = engine.step(&Turn::new("hello"), &mut session);
+        let after_first = session.memory.dropped_writes();
+        assert!(after_first > 0, "the turn must have hit the cap");
+        assert_eq!(
+            first.faults.memory_dropped_writes, after_first,
+            "the first turn's count equals everything dropped so far"
+        );
+
+        let second = engine.step(&Turn::new("hello again"), &mut session);
+        let after_second = session.memory.dropped_writes();
+        assert!(after_second >= after_first);
+        assert_eq!(
+            second.faults.memory_dropped_writes,
+            after_second - after_first,
+            "the second turn reports only its own drops"
+        );
+
+        // A quiet turn over a non-empty session reports zero, not the running total.
+        let mut calm = Session::new();
+        calm.memory.set("user", Value::Object(Vec::new()));
+        let report = engine.step(&Turn::new("hi"), &mut calm);
+        assert_eq!(
+            report.faults.memory_dropped_writes, 0,
+            "no overflow, no fault"
+        );
+        assert_eq!(calm.memory.dropped_writes(), 0);
     }
 
     // ------------------------------------------------------------------ phases on real modules

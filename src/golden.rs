@@ -254,7 +254,29 @@ impl Corpus {
     }
 
     /// Install a manifest parsed separately, validating it against the parsed turns.
-    pub fn with_manifest(mut self, manifest: Manifest) -> Result<Self> {
+    ///
+    /// The turn/session counts alone would accept a corpus that was *edited* consistently, so
+    /// the manifest's `corpus_sha256` is checked against the exact bytes the turns came from.
+    /// `corpus_bytes` is `None` when the caller parsed a buffer it no longer has: the counts
+    /// are still checked, and the digest is skipped rather than guessed.
+    pub fn with_manifest(self, manifest: Manifest) -> Result<Self> {
+        self.with_manifest_and_bytes(manifest, None)
+    }
+
+    /// [`Self::with_manifest`] plus the corpus bytes the manifest's digest covers.
+    pub fn with_manifest_and_bytes(
+        mut self,
+        manifest: Manifest,
+        corpus_bytes: Option<&[u8]>,
+    ) -> Result<Self> {
+        if let Some(bytes) = corpus_bytes {
+            let digest = crate::hash::sha256(&[bytes]).hex();
+            if digest != manifest.corpus_sha256 {
+                return Err(Error::Manifest {
+                    message: "manifest corpus_sha256 does not match corpus.jsonl",
+                });
+            }
+        }
         let turns = u64::try_from(self.len()).unwrap_or(u64::MAX);
         if manifest.turns != turns {
             return Err(Error::Manifest {
@@ -762,13 +784,10 @@ impl GoldenReport {
                 .or_insert_with(|| Group::sampling(expected_name))
                 .observe(comparison);
 
+            // "Turns it appears in" is about the *candidate* lists only: the winning module is
+            // already covered by `by_expected_module`, and folding it in here would count a
+            // module that proposed nothing as having proposed on every turn it won.
             let mut mentioned: Vec<&str> = Vec::new();
-            if let Some(module) = &comparison.expected_module {
-                mentioned.push(module.as_str());
-            }
-            if let Some(module) = &comparison.actual_module {
-                mentioned.push(module.as_str());
-            }
             for module in &comparison.expected_candidates {
                 mentioned.push(module.as_str());
             }
@@ -1012,7 +1031,10 @@ pub fn load_dir(dir: &std::path::Path) -> Result<Corpus> {
     let corpus = Corpus::parse(&bytes)?;
     let manifest_path = dir.join("manifest.json");
     match std::fs::read(&manifest_path) {
-        Ok(bytes) => corpus.with_manifest(Corpus::parse_manifest(&bytes)?),
+        Ok(manifest) => {
+            let manifest = Corpus::parse_manifest(&manifest)?;
+            corpus.with_manifest_and_bytes(manifest, Some(&bytes))
+        }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(corpus),
         Err(error) => Err(Error::io("read manifest", error)),
     }
@@ -1311,7 +1333,7 @@ mod tests {
             if let Json::Object(fields) = &mut value {
                 fields.retain(|(name, _)| name != key);
             }
-            let text = json::to_string(&value);
+            let text = json::to_string(&value).expect("finite test data");
             assert!(
                 matches!(
                     Corpus::parse_manifest(text.as_bytes()),
@@ -1325,6 +1347,92 @@ mod tests {
             Corpus::parse_manifest(negative.as_bytes()),
             Err(Error::Manifest { .. })
         ));
+    }
+
+    #[test]
+    fn a_manifest_whose_digest_disagrees_with_the_bytes_is_rejected() {
+        let directory = temp_dir("tampered-digest");
+        std::fs::create_dir_all(&directory).unwrap();
+        let corpus_bytes = format!("{}\n", line("s0000", 0));
+        std::fs::write(directory.join("corpus.jsonl"), &corpus_bytes).unwrap();
+        let good = corpus_bytes.trim_end().as_bytes();
+        let real_digest = crate::hash::sha256(&[corpus_bytes.as_bytes()]).hex();
+        // A manifest with the right counts but the digest of *different* bytes must be refused:
+        // counts alone cannot tell an edited corpus from the captured one.
+        let manifest = format!(
+            r#"{{"version":1,"created_by":"x","corpus_seed":1,"sessions":1,"turns":1,"corpus_sha256":"{}"}}"#,
+            crate::hash::sha256(&[good]).hex()
+        );
+        assert_ne!(crate::hash::sha256(&[good]).hex(), real_digest);
+        std::fs::write(directory.join("manifest.json"), manifest).unwrap();
+        assert!(
+            matches!(
+                load_dir(&directory),
+                Err(Error::Manifest { message }) if message.contains("sha256")
+            ),
+            "a digest mismatch must be a manifest error, not silently accepted"
+        );
+
+        // The honest manifest still loads, and the counts are still enforced.
+        let honest = format!(
+            r#"{{"version":1,"created_by":"x","corpus_seed":1,"sessions":1,"turns":1,"corpus_sha256":"{real_digest}"}}"#
+        );
+        std::fs::write(directory.join("manifest.json"), honest).unwrap();
+        let corpus = load_dir(&directory).expect("the honest manifest loads");
+        assert!(corpus.manifest.is_some());
+    }
+
+    #[test]
+    fn candidate_groups_ignore_the_winning_module() {
+        // A comparison where `chat` wins but only `greeting` proposed: `chat` must not appear
+        // in the candidate table (it proposed nothing), and `greeting` must be counted once
+        // even though it is both an expected and an actual candidate.
+        let comparison = TurnComparison {
+            index: 0,
+            session: "s0000".to_string(),
+            turn: 0,
+            block: Block::Curated,
+            input: "hello".to_string(),
+            expected_module: Some("chat".to_string()),
+            actual_module: Some("chat".to_string()),
+            expected_candidates: vec!["greeting".to_string(), "chat".to_string()],
+            actual_candidates: vec!["greeting".to_string(), "chat".to_string()],
+            reply_matches: true,
+            module_matches: true,
+            candidates_match: true,
+            candidates_diff: None,
+            memory_keys_match: true,
+            memory_digest_matches: true,
+            expected_reply: "hi".to_string(),
+            actual_reply: "hi".to_string(),
+            faults: Vec::new(),
+        };
+        let report = GoldenReport::build(&[comparison]);
+        let names: Vec<&str> = report
+            .by_candidate_module
+            .iter()
+            .map(|group| group.name.as_str())
+            .collect();
+        assert_eq!(
+            names,
+            vec!["chat", "greeting"],
+            "deduplicated, alphabetical"
+        );
+        assert_eq!(
+            report
+                .by_candidate_module
+                .iter()
+                .find(|group| group.name == "greeting")
+                .map(|group| group.agreement.turns),
+            Some(1),
+            "a module in both candidate lists counts once"
+        );
+
+        // A winner that proposed nothing is absent; only `chat` (present in both lists here)
+        // and `greeting` are candidates, and a winning-only module never enters the table.
+        let mut only_one = report.by_candidate_module.clone();
+        only_one.retain(|group| group.name == "chat");
+        assert_eq!(only_one.len(), 1);
     }
 
     #[test]
@@ -1512,7 +1620,7 @@ mod tests {
         assert!(text.contains("by block (directory)"));
         assert!(text.contains("faults: none"));
 
-        let rendered = json::to_string(&report.to_json());
+        let rendered = json::to_string(&report.to_json()).unwrap();
         let parsed = json::parse_str(&rendered).unwrap();
         assert_eq!(parsed.get("turns").and_then(Json::as_i64), Some(3_062));
         assert_eq!(
@@ -1547,8 +1655,10 @@ mod tests {
     #[test]
     fn the_report_is_deterministic_across_runs() {
         let corpus = real_corpus();
-        let first = json::to_string(&GoldenReport::build(&compare_corpus(&corpus)).to_json());
-        let second = json::to_string(&GoldenReport::build(&compare_corpus(&corpus)).to_json());
+        let first =
+            json::to_string(&GoldenReport::build(&compare_corpus(&corpus)).to_json()).unwrap();
+        let second =
+            json::to_string(&GoldenReport::build(&compare_corpus(&corpus)).to_json()).unwrap();
         assert_eq!(first, second);
     }
 
@@ -1560,7 +1670,7 @@ mod tests {
         assert!(report.overall.reply_percent().abs() < f64::EPSILON);
         let text = report.render_text();
         assert!(text.contains("0 turns"));
-        let parsed = json::parse_str(&json::to_string(&report.to_json())).unwrap();
+        let parsed = json::parse_str(&json::to_string(&report.to_json()).unwrap()).unwrap();
         assert_eq!(parsed.get("turns").and_then(Json::as_i64), Some(0));
     }
 

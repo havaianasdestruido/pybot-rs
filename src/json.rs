@@ -237,7 +237,12 @@ impl Parser<'_> {
             self.skip_whitespace();
             self.expect(b':', "expected ':'")?;
             let value = self.value(depth + 1)?;
-            fields.push((key, value));
+            // `json.loads` keeps the last value for a repeated key and Python dicts keep the
+            // position of the first insertion, so a later duplicate replaces in place.
+            match fields.iter_mut().find(|(existing, _)| *existing == key) {
+                Some(slot) => slot.1 = value,
+                None => fields.push((key, value)),
+            }
             self.skip_whitespace();
             match self.bump() {
                 Some(b',') => {}
@@ -435,21 +440,33 @@ impl Parser<'_> {
         let value: f64 = literal
             .parse()
             .map_err(|_| Error::json(start, "number out of range"))?;
+        // `1e999` parses to `inf`; JSON has no infinity, and letting one in would make every
+        // consumer (the memory digest, the report) deal with a value Python cannot produce.
+        if !value.is_finite() {
+            return Err(Error::json(start, "number out of range"));
+        }
         Ok(Json::Float(value))
     }
 }
 
 /// Serialise a value compactly (`separators=(",", ":")`), like Python's
 /// `json.dumps(value, ensure_ascii=False, separators=(",", ":"))`.
-#[must_use]
-pub fn to_string(value: &Json) -> String {
+///
+/// Fails with [`Error::Json`] for a non-finite float: JSON has no `inf`/`nan`, so emitting one
+/// would produce a document the parser (and every other reader) rejects. Only a hand-built
+/// [`Json::Float`] can hold one — parsing rejects it and [`pyutil::float_repr`] is never
+/// reached for it.
+pub fn to_string(value: &Json) -> Result<String> {
     let mut out = String::new();
-    write_value(&mut out, value);
-    out
+    write_value(&mut out, value)?;
+    Ok(out)
 }
 
 /// Write a value into an existing buffer (avoids re-allocating in loops).
-pub fn write_value(out: &mut String, value: &Json) {
+///
+/// On failure the buffer may hold a partial document; callers that need atomicity serialise
+/// into a fresh `String` via [`to_string`].
+pub fn write_value(out: &mut String, value: &Json) -> Result<()> {
     match value {
         Json::Null => out.push_str("null"),
         Json::Bool(true) => out.push_str("true"),
@@ -458,8 +475,9 @@ pub fn write_value(out: &mut String, value: &Json) {
             let _ = write!(out, "{integer}");
         }
         Json::Float(number) => {
-            // Python's json prints NaN/Infinity for those values; the port never produces
-            // them, and `float_repr` handles them defensively anyway.
+            if !number.is_finite() {
+                return Err(Error::json(0, "cannot serialize a non-finite number"));
+            }
             out.push_str(&pyutil::float_repr(*number));
         }
         Json::Str(text) => write_string(out, text),
@@ -469,7 +487,7 @@ pub fn write_value(out: &mut String, value: &Json) {
                 if index > 0 {
                     out.push(',');
                 }
-                write_value(out, item);
+                write_value(out, item)?;
             }
             out.push(']');
         }
@@ -481,11 +499,12 @@ pub fn write_value(out: &mut String, value: &Json) {
                 }
                 write_string(out, key);
                 out.push(':');
-                write_value(out, item);
+                write_value(out, item)?;
             }
             out.push('}');
         }
     }
+    Ok(())
 }
 
 /// Write a JSON string literal, escaping exactly what the JSON grammar requires.
@@ -791,6 +810,55 @@ mod tests {
     // ------------------------------------------------------------------ writer
 
     #[test]
+    fn a_repeated_key_keeps_the_last_value_in_the_first_position() {
+        // `json.loads` keeps the last value; a Python dict keeps the first insertion position.
+        let value = parse_ok(r#"{"a":1,"b":2,"a":3}"#);
+        let fields = value.as_object().expect("object");
+        assert_eq!(
+            fields,
+            vec![
+                ("a".to_string(), Json::Int(3)),
+                ("b".to_string(), Json::Int(2)),
+            ]
+        );
+        assert_eq!(value.get("a"), Some(&Json::Int(3)));
+        // Nested duplicates behave the same way.
+        let nested = parse_ok(r#"{"outer":{"x":"first","x":"second"}}"#);
+        assert_eq!(
+            nested
+                .get("outer")
+                .and_then(|inner| inner.get("x"))
+                .and_then(Json::as_str),
+            Some("second")
+        );
+    }
+
+    #[test]
+    fn non_finite_numbers_are_rejected_in_both_directions() {
+        // Parsing: JSON has no infinity, so an overflowing literal is an error, not `inf`.
+        assert!(parse(r#"{"x":1e999}"#.as_bytes()).is_err());
+        assert!(parse("-1e999".as_bytes()).is_err());
+        assert!(
+            parse("1e-999".as_bytes()).is_ok(),
+            "underflow is a legitimate zero"
+        );
+        assert!(parse("1e308".as_bytes()).is_ok());
+
+        // Writing: a directly built `Json::Float` cannot smuggle `inf`/`nan` into a document.
+        assert!(to_string(&Json::Float(f64::INFINITY)).is_err());
+        assert!(to_string(&Json::Float(f64::NAN)).is_err());
+        assert!(to_string(&Json::Array(vec![
+            Json::Int(1),
+            Json::Float(f64::NEG_INFINITY)
+        ]))
+        .is_err());
+        // Finite values keep their exact Python spelling.
+        assert_eq!(to_string(&Json::Float(300.0)).unwrap(), "300.0");
+        assert_eq!(to_string(&Json::Float(-999.5)).unwrap(), "-999.5");
+        assert_eq!(to_string(&Json::Float(1e16)).unwrap(), "1e+16");
+    }
+
+    #[test]
     fn writer_emits_python_compatible_compact_json() {
         let value = Json::Object(vec![
             ("module".into(), Json::Null),
@@ -800,7 +868,7 @@ mod tests {
             ("name".into(), Json::Str("café \"x\"".into())),
         ]);
         assert_eq!(
-            to_string(&value),
+            to_string(&value).unwrap(),
             r#"{"module":null,"priority":-1000.0,"index":3,"ok":false,"name":"café \"x\""}"#
         );
     }
@@ -818,7 +886,8 @@ mod tests {
         let parsed = parse_ok(line);
         let rendered = to_string(&parsed);
         assert_eq!(
-            rendered, line,
+            rendered.unwrap(),
+            line,
             "a canonical corpus line round-trips byte-identically"
         );
     }
@@ -826,6 +895,6 @@ mod tests {
     #[test]
     fn object_and_string_helpers_build_what_they_say() {
         let built = object([("a", string("x")), ("b", Json::Int(1))]);
-        assert_eq!(to_string(&built), r#"{"a":"x","b":1}"#);
+        assert_eq!(to_string(&built).unwrap(), r#"{"a":"x","b":1}"#);
     }
 }
